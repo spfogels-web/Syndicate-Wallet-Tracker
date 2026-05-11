@@ -5,7 +5,7 @@ import { findProject, setPaused } from '../services/tokenService';
 import {
   getAllTrackedSolanaAddresses,
 } from '../services/walletService';
-import { listWebhooks, listWebhooksRaw, syncSolanaWebhookAddresses } from '../chains/solana/client';
+import { listWebhooksRaw, updateWebhook } from '../chains/solana/client';
 import { env } from '../config/env';
 
 function parseChain(raw: string | undefined): Chain | null {
@@ -129,36 +129,66 @@ export function registerControlCommands(bot: Bot): void {
         await ctx.reply('No Solana wallets tracked yet — add one via /menu first.');
         return;
       }
-      await ctx.reply(`Syncing webhook at:\n\`${expectedUrl}\`\nTracking ${addresses.length} address(es)…`, {
-        parse_mode: 'Markdown',
-      });
-      await syncSolanaWebhookAddresses(addresses);
-      const after = await listWebhooks();
-      const ours = after.find((w) => w.webhookURL === expectedUrl);
-      if (!ours) {
+      await ctx.reply(`Syncing addresses for: ${expectedUrl}\nTracking ${addresses.length} address(es)…`);
+
+      // Find existing webhook by path suffix (tolerant of any URL casing/normalization)
+      const raw = await listWebhooksRaw();
+      if (!Array.isArray(raw.data) || raw.data.length === 0) {
         await ctx.reply(
-          `❌ Sync ran but no Helius webhook found at:\n\`${expectedUrl}\`\n\nCheck that HELIUS_API_KEY in Railway matches the Helius project you are viewing.`,
-          { parse_mode: 'Markdown' },
+          `Sync aborted — no webhooks visible to API key. Create one in Helius dashboard at ${expectedUrl} first (run /diagnose to confirm).`,
         );
         return;
       }
+      type Wh = {
+        webhookID?: string;
+        webhookURL?: string;
+        webhookType?: string;
+        accountAddresses?: string[];
+      };
+      const list = raw.data as Wh[];
+      const ours = list.find(
+        (w) => typeof w.webhookURL === 'string' && w.webhookURL.toLowerCase().includes('/webhooks/solana'),
+      );
+      if (!ours || !ours.webhookID) {
+        await ctx.reply(
+          `No webhook found matching /webhooks/solana. ${list.length} webhooks visible:\n${list
+            .map((w) => `- ${w.webhookURL ?? '(no url)'}`)
+            .join('\n')}`,
+        );
+        return;
+      }
+
+      // PUT update with only the fields Helius accepts — skip webhookURL to avoid
+      // any URL-validation issues that have been rejecting our requests.
+      const updateBody = {
+        accountAddresses: Array.from(new Set(addresses)),
+        transactionTypes: ['ANY'],
+        webhookType: ours.webhookType ?? 'enhanced',
+        ...(env.HELIUS_WEBHOOK_AUTH_HEADER
+          ? { authHeader: env.HELIUS_WEBHOOK_AUTH_HEADER }
+          : {}),
+      };
+      const updated = await updateWebhook(
+        ours.webhookID,
+        updateBody as unknown as Parameters<typeof updateWebhook>[1],
+      );
+
       await ctx.reply(
         [
-          '✅ *Helius webhook synced*',
+          '✅ Helius webhook synced',
           '',
-          `*URL:* \`${ours.webhookURL}\``,
-          `*Type:* ${ours.webhookType}`,
-          `*Tracked addresses:* ${ours.accountAddresses.length}`,
-          ours.accountAddresses.length > 0
-            ? `\nFirst few:\n${ours.accountAddresses
+          `URL: ${updated.webhookURL}`,
+          `Type: ${updated.webhookType}`,
+          `Tracked addresses: ${updated.accountAddresses.length}`,
+          updated.accountAddresses.length > 0
+            ? `\nFirst few:\n${updated.accountAddresses
                 .slice(0, 5)
-                .map((a) => `• \`${a}\``)
+                .map((a: string) => `• ${a}`)
                 .join('\n')}`
             : '',
         ]
           .filter(Boolean)
           .join('\n'),
-        { parse_mode: 'Markdown' },
       );
     } catch (err) {
       const e = err as Error & {
