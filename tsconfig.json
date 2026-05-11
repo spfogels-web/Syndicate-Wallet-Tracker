@@ -5,7 +5,7 @@
     "moduleResolution": "Node",
     "lib": ["ES2022"],
     "outDir": "./dist",
-    "rootDir": "./src",
+    "rootDir": "./",
     "strict": true,
     "noImplicitAny": true,
     "strictNullChecks": true,
@@ -23,11 +23,11 @@
     "removeComments": false,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
-    "baseUrl": "./src",
+    "baseUrl": "./",
     "paths": {
       "@/*": ["*"]
     }
   },
-  "include": ["src/**/*"],
+  "include": ["index.ts", "alerts/**/*", "bot/**/*", "chains/**/*", "commands/**/*", "config/**/*", "database/**/*", "server/**/*", "services/**/*", "types/**/*", "utils/**/*"],
   "exclude": ["node_modules", "dist", "**/*.test.ts"]
 }
