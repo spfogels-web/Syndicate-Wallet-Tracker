@@ -5,7 +5,7 @@ import { findProject, setPaused } from '../services/tokenService';
 import {
   getAllTrackedSolanaAddresses,
 } from '../services/walletService';
-import { listWebhooks, syncSolanaWebhookAddresses } from '../chains/solana/client';
+import { listWebhooks, listWebhooksRaw, syncSolanaWebhookAddresses } from '../chains/solana/client';
 import { env } from '../config/env';
 
 function parseChain(raw: string | undefined): Chain | null {
@@ -46,38 +46,49 @@ export function registerControlCommands(bot: Bot): void {
     const keyHead = env.HELIUS_API_KEY.slice(0, 8);
     const keyTail = env.HELIUS_API_KEY.slice(-4);
     try {
-      const webhooks = await listWebhooks();
+      const resp = await listWebhooksRaw();
+      const status = resp.status;
+      const webhooksRaw = resp.data;
+      const list = Array.isArray(resp.data) ? resp.data : [];
       const lines: string[] = [
         '*🔍 Helius diagnostics*',
         '',
         `API key: \`${keyHead}…${keyTail}\` (len ${env.HELIUS_API_KEY.length})`,
         `PUBLIC_URL: \`${env.PUBLIC_URL ?? '(not set)'}\``,
-        `Webhooks visible to this API key: *${webhooks.length}*`,
+        `GET /webhooks HTTP status: *${status}*`,
+        `Response type: \`${Array.isArray(resp.data) ? `array(${resp.data.length})` : typeof resp.data}\``,
         '',
       ];
-      if (webhooks.length === 0) {
+      if (list.length === 0) {
+        const preview = typeof webhooksRaw === 'string' ? webhooksRaw : JSON.stringify(webhooksRaw);
         lines.push(
-          'No webhooks. If you created one in the Helius dashboard,',
-          'your Railway `HELIUS_API_KEY` is for a DIFFERENT Helius project.',
-          'Check that the dashboard URL contains the same UUID as your key.',
+          'No webhooks visible to this key.',
+          '',
+          `Raw response preview:`,
+          `\`${(preview ?? '').toString().slice(0, 200)}\``,
         );
       } else {
-        for (const w of webhooks.slice(0, 5)) {
-          lines.push(
-            `• \`${w.webhookURL}\``,
-            `  type=${w.webhookType}, addresses=${w.accountAddresses.length}`,
-          );
+        for (const w of list.slice(0, 5)) {
+          const url = (w as { webhookURL?: string }).webhookURL ?? '(no url)';
+          const type = (w as { webhookType?: string }).webhookType ?? '(no type)';
+          const addrCount = Array.isArray((w as { accountAddresses?: unknown }).accountAddresses)
+            ? (w as { accountAddresses: unknown[] }).accountAddresses.length
+            : 0;
+          lines.push(`• \`${url}\``, `  type=${type}, addresses=${addrCount}`);
         }
       }
       await ctx.reply(lines.join('\n'), { parse_mode: 'Markdown' });
     } catch (err) {
-      const e = err as Error & { response?: { status?: number; data?: unknown }; config?: { baseURL?: string; url?: string } };
+      const e = err as Error & {
+        response?: { status?: number; data?: unknown };
+        config?: { baseURL?: string; url?: string };
+      };
       const where = e.config ? `${e.config.baseURL ?? ''}${e.config.url ?? ''}` : '(no request info)';
       const detail = e.response
         ? `HTTP ${e.response.status} — ${JSON.stringify(e.response.data)}`
         : e.message;
       await ctx.reply(
-        `❌ List webhooks failed:\n\`${detail}\`\n\nRequest URL: \`${where}\`\nAPI key: \`${keyHead}…${keyTail}\``,
+        `❌ Diagnose threw:\n\`${detail}\`\n\nRequest URL: \`${where}\`\nAPI key: \`${keyHead}…${keyTail}\``,
         { parse_mode: 'Markdown' },
       );
     }

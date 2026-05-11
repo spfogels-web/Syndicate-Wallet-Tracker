@@ -64,6 +64,12 @@ export async function listWebhooks(): Promise<HeliusWebhookConfig[]> {
   return Array.isArray(data) ? data : [];
 }
 
+/** Raw GET /webhooks — never throws on non-2xx, returns status + body for diagnostics. */
+export async function listWebhooksRaw(): Promise<{ status: number; data: unknown }> {
+  const resp = await heliusApi.get('/webhooks', { validateStatus: () => true });
+  return { status: resp.status, data: resp.data };
+}
+
 export async function createWebhook(cfg: Omit<HeliusWebhookConfig, 'webhookID'>): Promise<HeliusWebhookConfig> {
   const { data } = await heliusApi.post<HeliusWebhookConfig>('/webhooks', cfg);
   logger.info({ id: data.webhookID }, 'Helius webhook created');
