@@ -59,8 +59,9 @@ export interface HeliusWebhookConfig {
 }
 
 export async function listWebhooks(): Promise<HeliusWebhookConfig[]> {
-  const { data } = await heliusApi.get<HeliusWebhookConfig[]>('/webhooks');
-  return data;
+  const { data } = await heliusApi.get<HeliusWebhookConfig[] | null>('/webhooks');
+  // Helius returns an empty array as null/undefined for projects with no webhooks
+  return Array.isArray(data) ? data : [];
 }
 
 export async function createWebhook(cfg: Omit<HeliusWebhookConfig, 'webhookID'>): Promise<HeliusWebhookConfig> {
