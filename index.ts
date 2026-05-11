@@ -9,20 +9,21 @@ import { disconnectPrisma } from './database/prisma';
 async function main(): Promise<void> {
   logger.info({ env: env.NODE_ENV }, 'starting Crypto Syndicate Wallet Tracker');
 
-  await ensureBootstrapAdmins();
-
-  // HTTP server (webhook receiver + healthcheck)
+  // HTTP server first so /health can respond even if downstream init fails.
   const app = createApp();
   const server = app.listen(env.PORT, () => {
     logger.info({ port: env.PORT }, 'http server listening');
   });
 
+  // Background init — never block listen, never crash the process.
+  ensureBootstrapAdmins().catch((err) => logger.error({ err }, 'ensureBootstrapAdmins failed'));
+
   // Telegram bot (long polling)
   // We don't `await` startBot() because grammY's start() resolves only on shutdown.
-  void startBot();
+  startBot().catch((err) => logger.error({ err }, 'startBot failed'));
 
   // Initial Helius webhook sync (fires once at startup)
-  void resyncSolanaWebhook();
+  resyncSolanaWebhook().catch((err) => logger.error({ err }, 'resyncSolanaWebhook failed'));
 
   // Graceful shutdown
   const shutdown = async (signal: string) => {
