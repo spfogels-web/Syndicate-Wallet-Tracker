@@ -31,8 +31,45 @@ export async function handleSolanaWebhook(req: Request, res: Response): Promise<
     const trackedAddresses = new Set(wallets.map((w) => w.address));
     const trackedMints = new Set(wallets.map((w) => w.project.contractAddress));
 
+    logger.info(
+      {
+        txCount: txs.length,
+        trackedWalletCount: trackedAddresses.size,
+        trackedMintCount: trackedMints.size,
+        signatures: txs.map((t) => t.signature).filter(Boolean),
+      },
+      'solana webhook received',
+    );
+
     const events = parseHeliusTransactions(txs, trackedAddresses, trackedMints);
-    if (events.length === 0) return;
+
+    if (events.length === 0) {
+      // No match — dump enough of the first tx to figure out why
+      const sample = txs[0];
+      const tokenTransferSample = (sample?.tokenTransfers ?? []).slice(0, 5).map((t) => ({
+        mint: t.mint,
+        fromUserAccount: t.fromUserAccount,
+        toUserAccount: t.toUserAccount,
+        amount: t.rawTokenAmount?.tokenAmount,
+        decimals: t.rawTokenAmount?.decimals,
+      }));
+      logger.warn(
+        {
+          signature: sample?.signature,
+          type: sample?.type,
+          source: sample?.source,
+          feePayer: sample?.feePayer,
+          tokenTransferCount: sample?.tokenTransfers?.length ?? 0,
+          tokenTransferSample,
+          trackedAddresses: Array.from(trackedAddresses),
+          trackedMints: Array.from(trackedMints),
+        },
+        'solana webhook had no matching tracked events',
+      );
+      return;
+    }
+
+    logger.info({ eventCount: events.length }, 'solana webhook parsed events; dispatching');
     await handleParsedEvents(events);
   } catch (err) {
     logger.error({ err }, 'failed processing solana webhook');
