@@ -1,4 +1,5 @@
 import express, { type Application, type Request } from 'express';
+import path from 'node:path';
 import { logger } from '../utils/logger';
 import { healthRouter } from './routes/health';
 import { webhookRouter } from './routes/webhooks';
@@ -25,6 +26,9 @@ export function createApp(): Application {
     logger.debug({ method: req.method, path: req.path }, 'http request');
     next();
   });
+
+  // Static assets (logo, etc.) — long-cache, served before auth so they load on login page
+  app.use('/static', express.static(path.join(__dirname, 'public'), { maxAge: '7d' }));
 
   app.use('/', healthRouter);
   app.use('/webhooks', webhookRouter);

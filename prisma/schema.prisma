@@ -69,6 +69,12 @@ model Wallet {
   projectId       String
   address         String        // lowercased for EVM
   label           String
+  // Optional descriptive metadata for richer dashboard display
+  twitterHandle   String?       // e.g. "vitalikbuterin" (without the @)
+  telegramHandle  String?       // e.g. "VitalikButerin"
+  website         String?       // full URL
+  notes           String?       @db.Text
+  tags            String[]      @default([])
   isLinked        Boolean       @default(false) // true if discovered via transfer from another tracked wallet
   isActive        Boolean       @default(true)
   createdAt       DateTime      @default(now())

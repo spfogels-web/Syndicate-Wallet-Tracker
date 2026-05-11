@@ -12,6 +12,58 @@ export interface AddWalletInput {
   walletAddress: string;
   label: string;
   isLinked?: boolean;
+  twitterHandle?: string | null;
+  telegramHandle?: string | null;
+  website?: string | null;
+  notes?: string | null;
+  tags?: string[];
+}
+
+export interface UpdateWalletMetaInput {
+  label?: string;
+  twitterHandle?: string | null;
+  telegramHandle?: string | null;
+  website?: string | null;
+  notes?: string | null;
+  tags?: string[];
+}
+
+export async function updateWalletMeta(walletId: string, input: UpdateWalletMetaInput): Promise<Wallet> {
+  return prisma.wallet.update({
+    where: { id: walletId },
+    data: {
+      ...(input.label !== undefined ? { label: input.label } : {}),
+      ...(input.twitterHandle !== undefined ? { twitterHandle: input.twitterHandle } : {}),
+      ...(input.telegramHandle !== undefined ? { telegramHandle: input.telegramHandle } : {}),
+      ...(input.website !== undefined ? { website: input.website } : {}),
+      ...(input.notes !== undefined ? { notes: input.notes } : {}),
+      ...(input.tags !== undefined ? { tags: input.tags } : {}),
+    },
+  });
+}
+
+export async function searchWallets(query: string | null, limit = 100) {
+  const where = query
+    ? {
+        OR: [
+          { label: { contains: query, mode: 'insensitive' as const } },
+          { address: { contains: query, mode: 'insensitive' as const } },
+          { twitterHandle: { contains: query, mode: 'insensitive' as const } },
+          { telegramHandle: { contains: query, mode: 'insensitive' as const } },
+          { notes: { contains: query, mode: 'insensitive' as const } },
+          { tags: { has: query } },
+        ],
+      }
+    : {};
+  return prisma.wallet.findMany({
+    where,
+    take: limit,
+    orderBy: { createdAt: 'desc' },
+    include: {
+      project: { select: { id: true, name: true, chain: true, symbol: true, decimals: true } },
+      stats: true,
+    },
+  });
 }
 
 export async function addWallet(input: AddWalletInput): Promise<Wallet> {
@@ -52,6 +104,11 @@ export async function addWallet(input: AddWalletInput): Promise<Wallet> {
       address: wa,
       label: input.label,
       isLinked: !!input.isLinked,
+      twitterHandle: input.twitterHandle ?? null,
+      telegramHandle: input.telegramHandle ?? null,
+      website: input.website ?? null,
+      notes: input.notes ?? null,
+      tags: input.tags ?? [],
       stats: {
         create: {
           currentBalance: new Decimal(balance.toString()),

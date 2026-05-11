@@ -3,7 +3,12 @@ import { Chain } from '@prisma/client';
 import { prisma } from '../../database/prisma';
 import { requireAuthApi } from '../dashboardAuth';
 import { addProject, removeProject, setPaused, listProjects } from '../../services/tokenService';
-import { addWallet, removeWallet } from '../../services/walletService';
+import {
+  addWallet,
+  removeWallet,
+  searchWallets,
+  updateWalletMeta,
+} from '../../services/walletService';
 import { broadcast } from '../sse';
 import { logger } from '../../utils/logger';
 
@@ -143,6 +148,11 @@ apiRouter.get('/tokens/:id/wallets', async (req: Request, res: Response) => {
         id: w.id,
         address: w.address,
         label: w.label,
+        twitterHandle: w.twitterHandle,
+        telegramHandle: w.telegramHandle,
+        website: w.website,
+        notes: w.notes,
+        tags: w.tags,
         isLinked: w.isLinked,
         isActive: w.isActive,
         createdAt: w.createdAt.toISOString(),
@@ -169,8 +179,14 @@ apiRouter.get('/tokens/:id/wallets', async (req: Request, res: Response) => {
   }
 });
 
+function normStr(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  const t = v.trim();
+  return t.length === 0 ? null : t;
+}
+
 apiRouter.post('/tokens/:id/wallets', async (req: Request, res: Response) => {
-  const { walletAddress, label } = req.body ?? {};
+  const { walletAddress, label, twitterHandle, telegramHandle, website, notes, tags } = req.body ?? {};
   if (typeof walletAddress !== 'string' || !walletAddress.trim()) return errorJson(res, 400, 'invalid_wallet_address');
   if (typeof label !== 'string' || !label.trim()) return errorJson(res, 400, 'invalid_label');
   try {
@@ -181,6 +197,11 @@ apiRouter.post('/tokens/:id/wallets', async (req: Request, res: Response) => {
       contractAddress: project.contractAddress,
       walletAddress: walletAddress.trim(),
       label: label.trim(),
+      twitterHandle: normStr(twitterHandle),
+      telegramHandle: normStr(telegramHandle),
+      website: normStr(website),
+      notes: normStr(notes),
+      tags: Array.isArray(tags) ? tags.map((t) => String(t).trim()).filter(Boolean) : [],
     });
     broadcast({
       type: 'wallet_added',
@@ -196,6 +217,36 @@ apiRouter.post('/tokens/:id/wallets', async (req: Request, res: Response) => {
   }
 });
 
+apiRouter.patch('/wallets/:id', async (req: Request, res: Response) => {
+  try {
+    const id = String(req.params.id);
+    const existing = await prisma.wallet.findUnique({ where: { id } });
+    if (!existing) return errorJson(res, 404, 'not_found');
+    const body = req.body ?? {};
+    const wallet = await updateWalletMeta(id, {
+      label: typeof body.label === 'string' && body.label.trim() ? body.label.trim() : undefined,
+      twitterHandle: 'twitterHandle' in body ? normStr(body.twitterHandle) : undefined,
+      telegramHandle: 'telegramHandle' in body ? normStr(body.telegramHandle) : undefined,
+      website: 'website' in body ? normStr(body.website) : undefined,
+      notes: 'notes' in body ? normStr(body.notes) : undefined,
+      tags: Array.isArray(body.tags)
+        ? body.tags.map((t: unknown) => String(t).trim()).filter(Boolean)
+        : undefined,
+    });
+    broadcast({
+      type: 'wallet_added',
+      walletId: wallet.id,
+      projectId: wallet.projectId,
+      address: wallet.address,
+      label: wallet.label,
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    logger.warn({ err }, '/api/wallets PATCH failed');
+    errorJson(res, 400, (err as Error).message);
+  }
+});
+
 apiRouter.delete('/wallets/:address', async (req: Request, res: Response) => {
   try {
     const count = await removeWallet(String(req.params.address));
@@ -203,6 +254,47 @@ apiRouter.delete('/wallets/:address', async (req: Request, res: Response) => {
     res.json({ ok: true, removed: count });
   } catch (err) {
     errorJson(res, 400, (err as Error).message);
+  }
+});
+
+apiRouter.get('/wallets', async (req: Request, res: Response) => {
+  try {
+    const q = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+    const wallets = await searchWallets(q || null, 200);
+    res.json(
+      wallets.map((w) => ({
+        id: w.id,
+        address: w.address,
+        label: w.label,
+        twitterHandle: w.twitterHandle,
+        telegramHandle: w.telegramHandle,
+        website: w.website,
+        notes: w.notes,
+        tags: w.tags,
+        isLinked: w.isLinked,
+        isActive: w.isActive,
+        createdAt: w.createdAt.toISOString(),
+        project: w.project,
+        stats: w.stats
+          ? {
+              currentBalance: w.stats.currentBalance.toString(),
+              ownershipPct: w.stats.ownershipPct.toString(),
+              totalBought: w.stats.totalBought.toString(),
+              totalSold: w.stats.totalSold.toString(),
+              nativeSpent: w.stats.nativeSpent.toString(),
+              nativeReceived: w.stats.nativeReceived.toString(),
+              avgEntryPrice: w.stats.avgEntryPrice?.toString() ?? null,
+              firstBuyAt: w.stats.firstBuyAt?.toISOString() ?? null,
+              lastBuyAt: w.stats.lastBuyAt?.toISOString() ?? null,
+              lastSellAt: w.stats.lastSellAt?.toISOString() ?? null,
+              lastActivityAt: w.stats.lastActivityAt?.toISOString() ?? null,
+            }
+          : null,
+      })),
+    );
+  } catch (err) {
+    logger.error({ err }, '/api/wallets GET failed');
+    errorJson(res, 500, 'internal_error');
   }
 });
 

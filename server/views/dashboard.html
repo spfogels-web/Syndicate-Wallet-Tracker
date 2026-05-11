@@ -83,11 +83,11 @@
     <!-- TOP BAR -->
     <header class="relative z-10 border-b border-purple-500/15 bg-black/40 backdrop-blur">
       <div class="max-w-[1600px] mx-auto px-6 py-4 flex items-center justify-between">
-        <div class="flex items-center gap-3">
-          <div class="w-8 h-8 rounded-lg" style="background: linear-gradient(135deg, #22d3ee, #a855f7); box-shadow: 0 0 15px rgba(168,85,247,0.4);"></div>
-          <div>
-            <div class="text-xl font-bold gradient-text leading-none">SYNDICATE</div>
-            <div class="text-[10px] uppercase tracking-[0.2em] text-gray-500">Tracker · Dashboard</div>
+        <div class="flex items-center gap-4">
+          <img src="/static/logo.png" alt="Crypto Syndicate" class="h-14 w-auto" onerror="this.style.display='none'" />
+          <div class="hidden md:block">
+            <div class="text-[10px] uppercase tracking-[0.3em] text-gray-500">Dashboard</div>
+            <div class="text-xs text-cyan-300 mono">@Syndicatetracker_bot</div>
           </div>
         </div>
         <div class="flex items-center gap-6">
@@ -118,10 +118,18 @@
       </div>
     </section>
 
+    <!-- TAB NAV -->
+    <section class="relative z-10 max-w-[1600px] mx-auto px-6 mt-6">
+      <div class="flex gap-1 border-b border-purple-500/15">
+        <button @click="activeTab = 'tokens'" class="px-5 py-3 text-sm font-semibold uppercase tracking-widest transition" :class="activeTab === 'tokens' ? 'text-cyan-300 border-b-2 border-cyan-400' : 'text-gray-500 hover:text-gray-300'">Tokens</button>
+        <button @click="activeTab = 'wallets'; loadAllWallets()" class="px-5 py-3 text-sm font-semibold uppercase tracking-widest transition" :class="activeTab === 'wallets' ? 'text-cyan-300 border-b-2 border-cyan-400' : 'text-gray-500 hover:text-gray-300'">Wallet Directory</button>
+      </div>
+    </section>
+
     <!-- MAIN GRID -->
     <main class="relative z-10 max-w-[1600px] mx-auto px-6 mt-6 mb-12 grid grid-cols-1 lg:grid-cols-3 gap-6">
       <!-- LEFT/CENTER: TOKENS + WALLETS -->
-      <section class="lg:col-span-2 space-y-6">
+      <section class="lg:col-span-2 space-y-6" x-show="activeTab === 'tokens'">
 
         <!-- TOKENS PANEL -->
         <div class="gradient-border rounded-xl">
@@ -184,21 +192,39 @@
               <div class="px-5 py-4">
                 <div class="flex items-start justify-between gap-4">
                   <div class="min-w-0 flex-1">
-                    <div class="flex items-center gap-3 mb-1">
+                    <div class="flex items-center gap-2 mb-1 flex-wrap">
                       <span class="font-semibold text-gray-100" x-text="w.label"></span>
                       <span x-show="w.isLinked" class="badge bg-purple-500/15 text-purple-300">LINKED</span>
+                      <template x-for="tag in (w.tags || [])" :key="tag">
+                        <span class="badge bg-gray-500/15 text-gray-300" x-text="tag"></span>
+                      </template>
                     </div>
                     <button @click="copyAddr(w.address)" class="text-xs text-gray-400 mono hover:text-cyan-300 transition truncate block max-w-md text-left" :title="w.address">
                       <span x-text="w.address"></span>
                       <span class="text-gray-600 ml-1">⧉</span>
                     </button>
+                    <div class="flex items-center gap-3 mt-2 text-xs">
+                      <template x-if="w.twitterHandle">
+                        <a :href="'https://x.com/' + w.twitterHandle" target="_blank" class="text-cyan-300 hover:text-cyan-200 font-mono">𝕏 @<span x-text="w.twitterHandle"></span></a>
+                      </template>
+                      <template x-if="w.telegramHandle">
+                        <a :href="'https://t.me/' + w.telegramHandle" target="_blank" class="text-cyan-300 hover:text-cyan-200 font-mono">✈ @<span x-text="w.telegramHandle"></span></a>
+                      </template>
+                      <template x-if="w.website">
+                        <a :href="w.website" target="_blank" class="text-cyan-300 hover:text-cyan-200 font-mono">🔗 site</a>
+                      </template>
+                    </div>
+                    <p x-show="w.notes" x-text="w.notes" class="text-xs text-gray-400 mt-2 max-w-2xl"></p>
                   </div>
                   <div class="text-right">
                     <div class="text-[10px] uppercase tracking-widest text-gray-500">Balance</div>
                     <div class="font-semibold mono neon-cyan text-lg" x-text="formatAmount(w.stats?.currentBalance, selectedToken?.decimals)"></div>
                     <div class="text-xs text-gray-500 mono mt-0.5" x-text="(parseFloat(w.stats?.ownershipPct ?? '0')).toFixed(4) + '%'"></div>
                   </div>
-                  <button @click.stop="confirmRemoveWallet(w)" class="btn btn-danger">Remove</button>
+                  <div class="flex flex-col gap-2">
+                    <button @click.stop="openEditWallet(w)" class="btn btn-ghost">Edit</button>
+                    <button @click.stop="confirmRemoveWallet(w)" class="btn btn-danger">Remove</button>
+                  </div>
                 </div>
                 <div class="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
                   <div>
@@ -239,6 +265,68 @@
           </div>
         </div>
 
+      </section>
+
+      <!-- WALLET DIRECTORY -->
+      <section class="lg:col-span-2 space-y-6" x-show="activeTab === 'wallets'">
+        <div class="gradient-border rounded-xl">
+          <header class="px-5 py-4 flex items-center justify-between border-b border-purple-500/15 gap-4 flex-wrap">
+            <div class="min-w-0">
+              <h2 class="text-sm uppercase tracking-[0.2em] text-gray-300 font-semibold">Wallet Directory</h2>
+              <p class="text-xs text-gray-500 mt-1">All tracked wallets across all tokens · click a row to edit</p>
+            </div>
+            <input
+              type="text"
+              x-model="walletSearch"
+              @input.debounce.300ms="loadAllWallets()"
+              placeholder="Search by name, address, @handle, tag…"
+              class="input max-w-md"
+            />
+          </header>
+          <div class="divide-y divide-purple-500/10 max-h-[800px] overflow-y-auto scrollbar">
+            <template x-if="allWallets.length === 0">
+              <div class="px-5 py-10 text-center text-sm text-gray-500" x-text="walletSearch ? 'No matches.' : 'No wallets yet.'"></div>
+            </template>
+            <template x-for="w in allWallets" :key="w.id">
+              <div class="px-5 py-4 row-hover cursor-pointer transition" @click="openEditWallet(w)">
+                <div class="flex items-start justify-between gap-4">
+                  <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-2 mb-1 flex-wrap">
+                      <span class="font-semibold text-gray-100" x-text="w.label"></span>
+                      <span class="badge" :class="chainBadgeClass(w.project?.chain)" x-text="w.project?.chain"></span>
+                      <span class="text-xs text-gray-500">→ <span class="text-cyan-300" x-text="w.project?.name"></span></span>
+                      <span x-show="w.isLinked" class="badge bg-purple-500/15 text-purple-300">LINKED</span>
+                      <template x-for="tag in (w.tags || [])" :key="tag">
+                        <span class="badge bg-gray-500/15 text-gray-300" x-text="tag"></span>
+                      </template>
+                    </div>
+                    <button @click.stop="copyAddr(w.address)" class="text-xs text-gray-400 mono hover:text-cyan-300 transition truncate block max-w-md text-left" :title="w.address">
+                      <span x-text="w.address"></span>
+                      <span class="text-gray-600 ml-1">⧉</span>
+                    </button>
+                    <div class="flex items-center gap-3 mt-2 text-xs">
+                      <template x-if="w.twitterHandle">
+                        <a :href="'https://x.com/' + w.twitterHandle" target="_blank" @click.stop class="text-cyan-300 hover:text-cyan-200 font-mono">𝕏 @<span x-text="w.twitterHandle"></span></a>
+                      </template>
+                      <template x-if="w.telegramHandle">
+                        <a :href="'https://t.me/' + w.telegramHandle" target="_blank" @click.stop class="text-cyan-300 hover:text-cyan-200 font-mono">✈ @<span x-text="w.telegramHandle"></span></a>
+                      </template>
+                      <template x-if="w.website">
+                        <a :href="w.website" target="_blank" @click.stop class="text-cyan-300 hover:text-cyan-200 font-mono">🔗 site</a>
+                      </template>
+                    </div>
+                    <p x-show="w.notes" x-text="w.notes" class="text-xs text-gray-400 mt-2 max-w-2xl"></p>
+                  </div>
+                  <div class="text-right shrink-0">
+                    <div class="text-[10px] uppercase tracking-widest text-gray-500">Balance</div>
+                    <div class="font-semibold mono neon-cyan" x-text="formatAmount(w.stats?.currentBalance, w.project?.decimals)"></div>
+                    <div class="text-xs text-gray-500 mono mt-0.5" x-text="(parseFloat(w.stats?.ownershipPct ?? '0')).toFixed(4) + '%'"></div>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
       </section>
 
       <!-- RIGHT: LIVE FEED -->
@@ -315,14 +403,68 @@
         <h3 class="text-xl font-bold gradient-text mb-1">Add Wallet</h3>
         <p class="text-xs text-gray-500 mb-1">For token:</p>
         <p class="text-sm text-cyan-300 mb-5" x-text="selectedToken?.name + ' (' + selectedToken?.chain + ')'"></p>
-        <form @submit.prevent="addWallet()">
-          <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">Wallet Address</label>
+        <form @submit.prevent="addWallet()" class="max-h-[70vh] overflow-y-auto scrollbar pr-2">
+          <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">Wallet Address *</label>
           <input x-model="walletForm.walletAddress" required class="input mb-4" placeholder="7xKXtg2C..." />
-          <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">Label</label>
-          <input x-model="walletForm.label" required class="input mb-5" placeholder="Whale 1" />
+          <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">Label / Name *</label>
+          <input x-model="walletForm.label" required class="input mb-4" placeholder="Whale 1" />
+          <div class="grid grid-cols-2 gap-3 mb-4">
+            <div>
+              <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">𝕏 / Twitter</label>
+              <input x-model="walletForm.twitterHandle" class="input" placeholder="handle (no @)" />
+            </div>
+            <div>
+              <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">Telegram</label>
+              <input x-model="walletForm.telegramHandle" class="input" placeholder="handle (no @)" />
+            </div>
+          </div>
+          <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">Website</label>
+          <input x-model="walletForm.website" class="input mb-4" placeholder="https://…" />
+          <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">Tags <span class="text-gray-600">(comma separated)</span></label>
+          <input x-model="walletForm.tagsRaw" class="input mb-4" placeholder="whale, founder, vc" />
+          <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">Notes</label>
+          <textarea x-model="walletForm.notes" class="input mb-5" rows="3" placeholder="Background, source, why we're tracking…"></textarea>
           <div class="flex justify-end gap-2">
             <button type="button" @click="showAddWallet = false" class="btn btn-ghost">Cancel</button>
             <button type="submit" class="btn btn-primary" :disabled="busy" x-text="busy ? 'Adding…' : 'Add Wallet'"></button>
+          </div>
+          <p x-show="formError" x-text="formError" class="text-red-400 text-xs mt-3 mono"></p>
+        </form>
+      </div>
+    </div>
+
+    <!-- EDIT WALLET MODAL -->
+    <div x-show="showEditWallet" x-cloak @keydown.escape.window="showEditWallet = false"
+         class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
+      <div class="gradient-border-strong rounded-2xl p-6 w-full max-w-md" @click.outside="showEditWallet = false">
+        <h3 class="text-xl font-bold gradient-text mb-1">Edit Wallet</h3>
+        <p class="text-xs text-gray-500 mb-1 mono truncate" x-text="editForm.address"></p>
+        <p class="text-xs text-gray-500 mb-4" x-text="editForm.projectName"></p>
+        <form @submit.prevent="saveEditWallet()" class="max-h-[70vh] overflow-y-auto scrollbar pr-2">
+          <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">Label / Name *</label>
+          <input x-model="editForm.label" required class="input mb-4" />
+          <div class="grid grid-cols-2 gap-3 mb-4">
+            <div>
+              <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">𝕏 / Twitter</label>
+              <input x-model="editForm.twitterHandle" class="input" placeholder="handle (no @)" />
+            </div>
+            <div>
+              <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">Telegram</label>
+              <input x-model="editForm.telegramHandle" class="input" placeholder="handle (no @)" />
+            </div>
+          </div>
+          <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">Website</label>
+          <input x-model="editForm.website" class="input mb-4" placeholder="https://…" />
+          <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">Tags <span class="text-gray-600">(comma separated)</span></label>
+          <input x-model="editForm.tagsRaw" class="input mb-4" placeholder="whale, founder, vc" />
+          <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">Notes</label>
+          <textarea x-model="editForm.notes" class="input mb-5" rows="3"></textarea>
+          <div class="flex items-center justify-between">
+            <button type="button" @click="confirmRemoveFromEdit()" class="btn btn-danger">Remove Wallet</button>
+            <div class="flex gap-2">
+              <button type="button" @click="showEditWallet = false" class="btn btn-ghost">Cancel</button>
+              <button type="submit" class="btn btn-primary" :disabled="busy" x-text="busy ? 'Saving…' : 'Save'"></button>
+            </div>
           </div>
           <p x-show="formError" x-text="formError" class="text-red-400 text-xs mt-3 mono"></p>
         </form>
@@ -339,14 +481,19 @@
         return {
           tokens: [],
           wallets: [],
+          allWallets: [],
+          walletSearch: '',
           alerts: [],
           metrics: { tokens: 0, wallets: 0, alerts24h: 0, transactions24h: 0 },
           selectedToken: null,
+          activeTab: 'tokens',
           connected: false,
           showAddToken: false,
           showAddWallet: false,
+          showEditWallet: false,
           form: { chain: 'SOLANA', contractAddress: '', name: '' },
-          walletForm: { walletAddress: '', label: '' },
+          walletForm: { walletAddress: '', label: '', twitterHandle: '', telegramHandle: '', website: '', notes: '', tagsRaw: '' },
+          editForm: { id: '', address: '', projectName: '', label: '', twitterHandle: '', telegramHandle: '', website: '', notes: '', tagsRaw: '' },
           formError: '',
           busy: false,
           toast: { show: false, msg: '' },
@@ -478,19 +625,93 @@
             if (!this.selectedToken) return;
             this.formError = ''; this.busy = true;
             try {
+              const body = {
+                walletAddress: this.walletForm.walletAddress,
+                label: this.walletForm.label,
+                twitterHandle: (this.walletForm.twitterHandle || '').replace(/^@/, '') || null,
+                telegramHandle: (this.walletForm.telegramHandle || '').replace(/^@/, '') || null,
+                website: this.walletForm.website || null,
+                notes: this.walletForm.notes || null,
+                tags: (this.walletForm.tagsRaw || '').split(',').map((s) => s.trim()).filter(Boolean),
+              };
               const r = await fetch('/api/v1/tokens/' + this.selectedToken.id + '/wallets', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(this.walletForm),
+                body: JSON.stringify(body),
               });
               const data = await r.json();
               if (!r.ok) { this.formError = data.error || 'Failed'; return; }
               this.showAddWallet = false;
-              this.walletForm = { walletAddress: '', label: '' };
+              this.walletForm = { walletAddress: '', label: '', twitterHandle: '', telegramHandle: '', website: '', notes: '', tagsRaw: '' };
               await this.selectToken(this.selectedToken);
               this.loadTokens(); this.loadMetrics();
               this.showToast('Wallet added');
             } finally { this.busy = false; }
+          },
+
+          async loadAllWallets() {
+            const q = (this.walletSearch || '').trim();
+            const r = await fetch('/api/v1/wallets' + (q ? '?search=' + encodeURIComponent(q) : ''));
+            if (!r.ok) return;
+            this.allWallets = await r.json();
+          },
+
+          openEditWallet(w) {
+            this.formError = '';
+            // w may come from the global directory (has w.project) or the per-token drawer (no w.project — use selectedToken)
+            const proj = w.project ?? this.selectedToken;
+            this.editForm = {
+              id: w.id,
+              address: w.address,
+              projectName: proj ? (proj.name + ' (' + proj.chain + ')') : '',
+              label: w.label || '',
+              twitterHandle: w.twitterHandle || '',
+              telegramHandle: w.telegramHandle || '',
+              website: w.website || '',
+              notes: w.notes || '',
+              tagsRaw: (w.tags || []).join(', '),
+            };
+            this.showEditWallet = true;
+          },
+
+          async saveEditWallet() {
+            this.formError = ''; this.busy = true;
+            try {
+              const body = {
+                label: this.editForm.label,
+                twitterHandle: (this.editForm.twitterHandle || '').replace(/^@/, '') || null,
+                telegramHandle: (this.editForm.telegramHandle || '').replace(/^@/, '') || null,
+                website: this.editForm.website || null,
+                notes: this.editForm.notes || null,
+                tags: (this.editForm.tagsRaw || '').split(',').map((s) => s.trim()).filter(Boolean),
+              };
+              const r = await fetch('/api/v1/wallets/' + this.editForm.id, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+              });
+              const data = await r.json();
+              if (!r.ok) { this.formError = data.error || 'Failed'; return; }
+              this.showEditWallet = false;
+              await this.loadAllWallets();
+              if (this.selectedToken) this.selectToken(this.selectedToken);
+              this.showToast('Wallet updated');
+            } finally { this.busy = false; }
+          },
+
+          confirmRemoveFromEdit() {
+            if (!confirm('Stop tracking ' + this.editForm.label + '?')) return;
+            this.removeWalletById(this.editForm.id, this.editForm.address);
+          },
+
+          async removeWalletById(_id, address) {
+            const r = await fetch('/api/v1/wallets/' + encodeURIComponent(address), { method: 'DELETE' });
+            if (!r.ok) { this.showToast('Failed to remove'); return; }
+            this.showEditWallet = false;
+            await this.loadAllWallets();
+            this.loadTokens(); this.loadMetrics();
+            if (this.selectedToken) this.selectToken(this.selectedToken);
+            this.showToast('Wallet removed');
           },
 
           copyAddr(addr) {
@@ -527,6 +748,7 @@
             } else if (ev.type === 'wallet_added' || ev.type === 'wallet_removed') {
               if (this.selectedToken) this.selectToken(this.selectedToken);
               this.loadTokens(); this.loadMetrics();
+              if (this.activeTab === 'wallets') this.loadAllWallets();
             }
           },
         };
