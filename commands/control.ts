@@ -2,6 +2,11 @@ import type { Bot } from 'grammy';
 import { Chain } from '@prisma/client';
 import { adminOnly } from '../bot/middleware';
 import { findProject, setPaused } from '../services/tokenService';
+import {
+  getAllTrackedSolanaAddresses,
+} from '../services/walletService';
+import { listWebhooks, syncSolanaWebhookAddresses } from '../chains/solana/client';
+import { env } from '../config/env';
 
 function parseChain(raw: string | undefined): Chain | null {
   if (!raw) return null;
@@ -36,4 +41,53 @@ export function registerControlCommands(bot: Bot): void {
       });
     });
   }
+
+  bot.command('resync', adminOnly, async (ctx) => {
+    if (!env.PUBLIC_URL) {
+      await ctx.reply('❌ PUBLIC_URL is not set in Railway. Set it before resyncing.');
+      return;
+    }
+    const expectedUrl = `${env.PUBLIC_URL.replace(/\/+$/, '')}/webhooks/solana`;
+    try {
+      const addresses = await getAllTrackedSolanaAddresses();
+      if (addresses.length === 0) {
+        await ctx.reply('No Solana wallets tracked yet — add one via /menu first.');
+        return;
+      }
+      await syncSolanaWebhookAddresses(addresses);
+      const after = await listWebhooks();
+      const ours = after.find((w) => w.webhookURL === expectedUrl);
+      if (!ours) {
+        await ctx.reply(
+          `❌ Sync ran but no Helius webhook found at:\n\`${expectedUrl}\`\n\nCheck that HELIUS_API_KEY in Railway matches the Helius project you are viewing.`,
+          { parse_mode: 'Markdown' },
+        );
+        return;
+      }
+      await ctx.reply(
+        [
+          '✅ *Helius webhook synced*',
+          '',
+          `*URL:* \`${ours.webhookURL}\``,
+          `*Type:* ${ours.webhookType}`,
+          `*Tracked addresses:* ${ours.accountAddresses.length}`,
+          ours.accountAddresses.length > 0
+            ? `\nFirst few:\n${ours.accountAddresses
+                .slice(0, 5)
+                .map((a) => `• \`${a}\``)
+                .join('\n')}`
+            : '',
+        ]
+          .filter(Boolean)
+          .join('\n'),
+        { parse_mode: 'Markdown' },
+      );
+    } catch (err) {
+      const e = err as Error & { response?: { status?: number; data?: unknown } };
+      const detail = e.response
+        ? `HTTP ${e.response.status} — ${JSON.stringify(e.response.data)}`
+        : e.message;
+      await ctx.reply(`❌ Resync failed:\n\`${detail}\``, { parse_mode: 'Markdown' });
+    }
+  });
 }
