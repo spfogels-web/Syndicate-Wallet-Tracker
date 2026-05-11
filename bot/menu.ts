@@ -335,15 +335,18 @@ export function registerMenuHandlers(bot: Bot): void {
     if (text.startsWith('/')) return next();
     const p = getPending(ctx.from.id);
     if (!p) return next();
-    clearPending(ctx.from.id);
 
+    // Don't clear pending state on recoverable format errors — let the user retry
+    // by sending another message. Clear only on success or on terminal errors.
+    let success = false;
     try {
       if (p.type === 'addtoken') {
         const parts = text.split(/\s+/);
         if (parts.length < 2) {
-          await ctx.reply('Need: `<CA> <name>`. Open /menu and try again.', {
-            parse_mode: 'Markdown',
-          });
+          await ctx.reply(
+            'Need both the contract address AND a name in one message:\n`<CA> Token Name`\n\nTry again, or send /cancel to abort.',
+            { parse_mode: 'Markdown' },
+          );
           return;
         }
         const [ca, ...nameParts] = parts;
@@ -357,17 +360,20 @@ export function registerMenuHandlers(bot: Bot): void {
           `✅ Tracking *${escapeMd(project.name)}* on *${project.chain}*\nCA: \`${project.contractAddress}\`\n\nUse the menu to add wallets.`,
           { parse_mode: 'Markdown' },
         );
+        success = true;
       } else if (p.type === 'addwallet') {
         const parts = text.split(/\s+/);
         if (parts.length < 2) {
-          await ctx.reply('Need: `<wallet> <label>`. Open /menu and try again.', {
-            parse_mode: 'Markdown',
-          });
+          await ctx.reply(
+            'Need both the wallet address AND a label in one message:\n`<wallet> Whale 1`\n\nTry again, or send /cancel to abort.',
+            { parse_mode: 'Markdown' },
+          );
           return;
         }
         const project = await prisma.project.findUnique({ where: { id: p.projectId } });
         if (!project) {
           await ctx.reply('Token no longer exists.');
+          success = true; // terminal — clear state
           return;
         }
         const [wa, ...labelParts] = parts;
@@ -381,12 +387,13 @@ export function registerMenuHandlers(bot: Bot): void {
           `✅ Tracking wallet *${escapeMd(wallet.label)}* on ${project.chain}\n\`${wallet.address}\``,
           { parse_mode: 'Markdown' },
         );
+        success = true;
       } else if (p.type === 'addadmin') {
         let tid: bigint;
         try {
           tid = BigInt(text.trim());
         } catch {
-          await ctx.reply('Telegram ID must be numeric.');
+          await ctx.reply('Telegram ID must be numeric. Try again, or send /cancel to abort.');
           return;
         }
         await prisma.admin.upsert({
@@ -395,10 +402,13 @@ export function registerMenuHandlers(bot: Bot): void {
           create: { telegramId: tid, addedById: BigInt(ctx.from.id) },
         });
         await ctx.reply(`✅ Added admin: \`${tid.toString()}\``, { parse_mode: 'Markdown' });
+        success = true;
       }
     } catch (err) {
       logger.error({ err }, 'pending action failed');
-      await ctx.reply(`❌ ${(err as Error).message}`);
+      await ctx.reply(`❌ ${(err as Error).message}\n\nTry again, or send /cancel to abort.`);
+      // Keep pending state — service errors (bad address, network) are usually recoverable.
     }
+    if (success) clearPending(ctx.from.id);
   });
 }
