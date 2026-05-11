@@ -4,150 +4,47 @@ import { registerTokenCommands } from './token';
 import { registerWalletCommands } from './wallet';
 import { registerAdminCommands } from './admin';
 import { registerControlCommands } from './control';
+import { registerMenuHandlers, showMenu } from '../bot/menu';
+import { HELP_TEXT } from './help-text';
 
 export function registerCommands(bot: Bot): void {
   bot.use(rateLimit);
 
-  bot.command('start', (ctx) =>
-    ctx.reply(
+  bot.command('start', async (ctx) => {
+    await ctx.reply(
       [
         '👋 *Crypto Syndicate Wallet Tracker*',
         '',
         'Tracks investor wallet activity across Solana, Ethereum, and Base.',
-        'Send /help for the full setup guide with examples.',
-        '',
-        '*Token commands*',
-        '/addtoken [chain] [CA] [name]',
-        '/removetoken [chain] [CA]',
-        '/tokens',
-        '',
-        '*Wallet commands*',
-        '/addwallet [chain] [CA] [wallet] [label]',
-        '/removewallet [wallet]',
-        '/wallets [CA]',
-        '',
-        '*Admin*',
-        '/admin add [telegramId]',
-        '/admin remove [telegramId]',
-        '/admin list',
-        '/pause [chain] [CA]',
-        '/resume [chain] [CA]',
+        'Pick an option below, or send /help for the full guide.',
       ].join('\n'),
       { parse_mode: 'Markdown' },
-    ),
-  );
+    );
+    await showMenu(ctx);
+  });
 
-  bot.command('help', (ctx) =>
-    ctx.reply(
-      [
-        '📖 *Crypto Syndicate Wallet Tracker — Full Setup*',
-        '',
-        '*How it works*',
-        '1. Add a TOKEN (the contract you want to monitor)',
-        '2. Add WALLETS that you want to watch trading that token',
-        '3. Alerts fire automatically when those wallets buy / sell / transfer',
-        '4. Pause, resume, or remove anytime',
-        '',
-        'Supported chains: `solana` (or `sol`), `ethereum` (or `eth`), `base`',
-        '',
-        '━━━━━━━━━━━━',
-        '',
-        '*Step 1 — Add a token*',
-        '`/addtoken [chain] [CA] [name]`',
-        '',
-        '`CA` = contract address (mint on Solana, contract on EVM).',
-        'The bot fetches symbol / decimals / total supply on add.',
-        'Alerts for this token go to the chat where you ran the command.',
-        '',
-        'Examples:',
-        '`/addtoken solana EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v USDC`',
-        '`/addtoken ethereum 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 WETH`',
-        '`/addtoken base 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 USDC`',
-        '',
-        '`/tokens` — list everything you are tracking',
-        '`/removetoken [chain] [CA]` — stop tracking a token',
-        '',
-        '━━━━━━━━━━━━',
-        '',
-        '*Step 2 — Add wallets to watch*',
-        '`/addwallet [chain] [CA] [wallet] [label]`',
-        '',
-        '`chain` + `CA` must match a token you already added.',
-        '`label` is your nickname for the wallet (multiple words ok).',
-        '',
-        'Examples:',
-        '`/addwallet base 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 0xABC123...DEF Whale 1`',
-        '`/addwallet solana EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v 7xKXtg2C... Insider Alpha`',
-        '',
-        '`/wallets [CA]` — list wallets for a token (balance + ownership %)',
-        '`/removewallet [wallet]` — stop tracking a wallet across all tokens',
-        '',
-        '━━━━━━━━━━━━',
-        '',
-        '*Step 3 — Real-time alerts*',
-        '🟢 BUY — wallet acquired the tracked token',
-        '🔴 SELL — wallet sold the tracked token',
-        '🔵 TRANSFER — incoming transfer to wallet',
-        '🔗 LINKED — auto-discovered child wallet (received funds from a tracked wallet)',
-        '',
-        'Each alert shows amount, native cost / proceeds, avg entry, current balance, ownership %, and an explorer link.',
-        '',
-        '━━━━━━━━━━━━',
-        '',
-        '*Pause / resume*',
-        '`/pause [chain] [CA]` — silence alerts for a token without removing it',
-        '`/resume [chain] [CA]` — re-enable alerts',
-        '',
-        '━━━━━━━━━━━━',
-        '',
-        '*Admin management*',
-        'All add / remove / pause commands are admin-only.',
-        '`/admin list` — current admins',
-        '`/admin add [telegramId]` — promote a user',
-        '`/admin remove [telegramId]` — revoke admin',
-        '',
-        'Get a Telegram ID via @userinfobot.',
-        '',
-        '━━━━━━━━━━━━',
-        '',
-        '*One-time infra checklist*',
-        'Required Railway env vars:',
-        '• `DATABASE_URL` — Railway Postgres (`${{Postgres.DATABASE_URL}}`)',
-        '• `TELEGRAM_BOT_TOKEN` — from @BotFather',
-        '• `TELEGRAM_BOOTSTRAP_ADMINS` — your numeric TG id',
-        '• `HELIUS_API_KEY` — from dashboard.helius.dev',
-        '• `ALCHEMY_API_KEY` — from dashboard.alchemy.com',
-        '• `ETHERSCAN_API_KEY` — from etherscan.io/myapikey',
-        '',
-        'Optional:',
-        '• `TELEGRAM_DEFAULT_CHAT_ID` — fallback alert chat',
-        '• `PUBLIC_URL` — enables Helius webhook auto-sync',
-        '• `HELIUS_WEBHOOK_AUTH_HEADER` — Helius signature header',
-        '• `ALCHEMY_WEBHOOK_SIGNING_KEY` — Alchemy HMAC signing key',
-        '',
-        'For live alerts, configure webhooks in the Helius and Alchemy dashboards pointing at:',
-        '`<PUBLIC_URL>/webhooks/solana` (Helius)',
-        '`<PUBLIC_URL>/webhooks/ethereum` and `<PUBLIC_URL>/webhooks/base` (Alchemy)',
-      ].join('\n'),
-      { parse_mode: 'Markdown' },
-    ),
-  );
+  bot.command('menu', (ctx) => showMenu(ctx));
+
+  bot.command('help', (ctx) => ctx.reply(HELP_TEXT, { parse_mode: 'Markdown' }));
 
   registerTokenCommands(bot);
   registerWalletCommands(bot);
   registerAdminCommands(bot);
   registerControlCommands(bot);
+  registerMenuHandlers(bot);
 
   // Telegram command menu hint
   void bot.api.setMyCommands([
-    { command: 'start', description: 'Show command list' },
+    { command: 'start', description: 'Open menu' },
+    { command: 'menu', description: 'Open the button menu' },
     { command: 'help', description: 'Full setup guide with examples' },
-    { command: 'addtoken', description: 'Track a token: [chain] [CA] [name]' },
-    { command: 'removetoken', description: 'Stop tracking a token: [chain] [CA]' },
+    { command: 'cancel', description: 'Cancel a pending action' },
     { command: 'tokens', description: 'List tracked tokens' },
-    { command: 'addwallet', description: 'Track a wallet: [chain] [CA] [wallet] [label]' },
-    { command: 'removewallet', description: 'Remove a tracked wallet' },
     { command: 'wallets', description: 'List wallets for a token: [CA]' },
+    { command: 'addtoken', description: 'Track a token: [chain] [CA] [name]' },
+    { command: 'addwallet', description: 'Track a wallet: [chain] [CA] [wallet] [label]' },
+    { command: 'removetoken', description: 'Stop tracking a token: [chain] [CA]' },
+    { command: 'removewallet', description: 'Remove a tracked wallet' },
     { command: 'pause', description: 'Pause alerts for a token' },
     { command: 'resume', description: 'Resume alerts for a token' },
     { command: 'admin', description: 'Manage admins' },
