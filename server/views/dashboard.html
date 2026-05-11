@@ -1,0 +1,536 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Syndicate Tracker — Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+    <style>
+      :root {
+        --neon-cyan: #22d3ee;
+        --neon-purple: #a855f7;
+        --bg-deep: #07060f;
+        --bg-card: #0f0d1c;
+        --bg-card-2: #14111f;
+      }
+      html, body { background: var(--bg-deep); font-family: 'Inter', system-ui, sans-serif; color: #e5e7eb; }
+      body { min-height: 100vh; }
+      body::before {
+        content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+        background:
+          radial-gradient(circle at 0% 0%, rgba(168,85,247,0.18), transparent 35%),
+          radial-gradient(circle at 100% 100%, rgba(34,211,238,0.12), transparent 40%),
+          linear-gradient(rgba(255,255,255,0.012) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255,255,255,0.012) 1px, transparent 1px);
+        background-size: auto, auto, 32px 32px, 32px 32px;
+      }
+      .mono { font-family: 'JetBrains Mono', monospace; }
+      .gradient-border {
+        background: linear-gradient(var(--bg-card), var(--bg-card)) padding-box,
+                    linear-gradient(135deg, rgba(34,211,238,0.5) 0%, rgba(168,85,247,0.5) 100%) border-box;
+        border: 1px solid transparent;
+      }
+      .gradient-border-strong {
+        background: linear-gradient(var(--bg-card), var(--bg-card)) padding-box,
+                    linear-gradient(135deg, #22d3ee 0%, #a855f7 100%) border-box;
+        border: 1px solid transparent;
+      }
+      .gradient-text {
+        background: linear-gradient(135deg, #22d3ee 0%, #a855f7 100%);
+        -webkit-background-clip: text; background-clip: text; color: transparent;
+      }
+      .neon-cyan { color: #22d3ee; }
+      .neon-purple { color: #a855f7; }
+      .badge {
+        font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+        padding: 2px 8px; border-radius: 999px;
+      }
+      .btn {
+        font-weight: 600; padding: 8px 16px; border-radius: 8px; font-size: 13px;
+        transition: all 0.15s ease; cursor: pointer;
+      }
+      .btn-primary {
+        background: linear-gradient(135deg, #06b6d4 0%, #a855f7 100%); color: white;
+      }
+      .btn-primary:hover { filter: brightness(1.15); transform: translateY(-1px); }
+      .btn-ghost { background: rgba(255,255,255,0.05); color: #d1d5db; border: 1px solid rgba(168,85,247,0.2); }
+      .btn-ghost:hover { background: rgba(168,85,247,0.1); border-color: rgba(168,85,247,0.4); }
+      .btn-danger { background: rgba(239,68,68,0.15); color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
+      .btn-danger:hover { background: rgba(239,68,68,0.25); }
+      .input {
+        background: rgba(0,0,0,0.4); border: 1px solid rgba(168,85,247,0.25);
+        border-radius: 8px; padding: 10px 14px; color: #e5e7eb; width: 100%;
+        font-family: 'JetBrains Mono', monospace; font-size: 13px;
+      }
+      .input:focus { outline: none; border-color: #22d3ee; box-shadow: 0 0 0 3px rgba(34,211,238,0.15); }
+      .select { background-color: rgba(0,0,0,0.4); }
+      .row-hover:hover { background: rgba(168,85,247,0.04); }
+      .alert-pulse { animation: pulse 0.6s ease-out 1; }
+      @keyframes pulse {
+        0% { background-color: rgba(34,211,238,0.25); }
+        100% { background-color: transparent; }
+      }
+      .scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+      .scrollbar::-webkit-scrollbar-track { background: transparent; }
+      .scrollbar::-webkit-scrollbar-thumb { background: rgba(168,85,247,0.3); border-radius: 3px; }
+      .scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(168,85,247,0.5); }
+      [x-cloak] { display: none !important; }
+    </style>
+  </head>
+  <body x-data="dashboard()" x-init="init()" x-cloak class="relative">
+    <!-- TOP BAR -->
+    <header class="relative z-10 border-b border-purple-500/15 bg-black/40 backdrop-blur">
+      <div class="max-w-[1600px] mx-auto px-6 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-lg" style="background: linear-gradient(135deg, #22d3ee, #a855f7); box-shadow: 0 0 15px rgba(168,85,247,0.4);"></div>
+          <div>
+            <div class="text-xl font-bold gradient-text leading-none">SYNDICATE</div>
+            <div class="text-[10px] uppercase tracking-[0.2em] text-gray-500">Tracker · Dashboard</div>
+          </div>
+        </div>
+        <div class="flex items-center gap-6">
+          <div class="flex items-center gap-2 text-xs">
+            <div class="w-2 h-2 rounded-full" :class="connected ? 'bg-emerald-400' : 'bg-red-400'" :style="connected ? 'box-shadow: 0 0 8px #34d399;' : ''"></div>
+            <span x-text="connected ? 'Live' : 'Disconnected'" class="text-gray-400 uppercase tracking-widest font-semibold"></span>
+          </div>
+          <a href="https://t.me/Syndicatetracker_bot" target="_blank" class="text-xs text-cyan-300 hover:text-cyan-200 font-mono">@Syndicatetracker_bot ↗</a>
+          <form method="POST" action="/logout"><button class="btn btn-ghost text-xs">Sign out</button></form>
+        </div>
+      </div>
+    </header>
+
+    <!-- METRIC STRIP -->
+    <section class="relative z-10 max-w-[1600px] mx-auto px-6 mt-6">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <template x-for="metric in [
+          { label: 'Tokens Tracked', value: metrics.tokens, color: 'cyan' },
+          { label: 'Active Wallets', value: metrics.wallets, color: 'purple' },
+          { label: 'Alerts · 24h', value: metrics.alerts24h, color: 'cyan' },
+          { label: 'Transactions · 24h', value: metrics.transactions24h, color: 'purple' },
+        ]" :key="metric.label">
+          <div class="gradient-border rounded-xl p-5">
+            <div class="text-[10px] uppercase tracking-[0.2em] text-gray-500 mb-2" x-text="metric.label"></div>
+            <div class="text-3xl font-bold mono" :class="metric.color === 'cyan' ? 'neon-cyan' : 'neon-purple'" x-text="metric.value ?? '—'"></div>
+          </div>
+        </template>
+      </div>
+    </section>
+
+    <!-- MAIN GRID -->
+    <main class="relative z-10 max-w-[1600px] mx-auto px-6 mt-6 mb-12 grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- LEFT/CENTER: TOKENS + WALLETS -->
+      <section class="lg:col-span-2 space-y-6">
+
+        <!-- TOKENS PANEL -->
+        <div class="gradient-border rounded-xl">
+          <header class="px-5 py-4 flex items-center justify-between border-b border-purple-500/15">
+            <div>
+              <h2 class="text-sm uppercase tracking-[0.2em] text-gray-300 font-semibold">Tracked Tokens</h2>
+              <p class="text-xs text-gray-500 mt-1">Contracts being monitored across chains</p>
+            </div>
+            <button @click="showAddToken = true" class="btn btn-primary">+ Add Token</button>
+          </header>
+          <div class="divide-y divide-purple-500/10">
+            <template x-if="tokens.length === 0">
+              <div class="px-5 py-10 text-center text-sm text-gray-500">No tokens yet. Add one to start tracking.</div>
+            </template>
+            <template x-for="t in tokens" :key="t.id">
+              <div class="px-5 py-4 row-hover transition cursor-pointer" @click="selectToken(t)">
+                <div class="flex items-center justify-between gap-4">
+                  <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-3 mb-1">
+                      <span class="font-semibold text-gray-100" x-text="t.name"></span>
+                      <span class="badge" :class="chainBadgeClass(t.chain)" x-text="t.chain"></span>
+                      <span x-show="t.isPaused" class="badge bg-yellow-500/15 text-yellow-300">PAUSED</span>
+                      <span x-show="t.symbol" class="text-xs text-gray-500 mono" x-text="t.symbol"></span>
+                    </div>
+                    <div class="text-xs text-gray-500 mono truncate" x-text="t.contractAddress"></div>
+                  </div>
+                  <div class="text-right text-xs">
+                    <div class="text-gray-400">Wallets</div>
+                    <div class="text-lg font-semibold neon-cyan mono" x-text="t.walletCount"></div>
+                  </div>
+                  <div class="flex items-center gap-2" @click.stop>
+                    <button @click="togglePause(t)" class="btn btn-ghost" x-text="t.isPaused ? 'Resume' : 'Pause'"></button>
+                    <button @click="confirmRemoveToken(t)" class="btn btn-danger">Remove</button>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- WALLETS PANEL (for selected token) -->
+        <div class="gradient-border rounded-xl" x-show="selectedToken" x-transition>
+          <header class="px-5 py-4 flex items-center justify-between border-b border-purple-500/15">
+            <div class="min-w-0">
+              <h2 class="text-sm uppercase tracking-[0.2em] text-gray-300 font-semibold">
+                Wallets · <span x-text="selectedToken?.name" class="text-cyan-300"></span>
+              </h2>
+              <div class="text-xs text-gray-500 mt-1 mono truncate" x-text="selectedToken?.contractAddress"></div>
+            </div>
+            <div class="flex gap-2">
+              <button @click="showAddWallet = true" class="btn btn-primary">+ Add Wallet</button>
+              <button @click="selectedToken = null; wallets = []" class="btn btn-ghost">Close</button>
+            </div>
+          </header>
+          <div class="divide-y divide-purple-500/10 max-h-[600px] overflow-y-auto scrollbar">
+            <template x-if="wallets.length === 0">
+              <div class="px-5 py-10 text-center text-sm text-gray-500">No wallets tracked for this token yet.</div>
+            </template>
+            <template x-for="w in wallets" :key="w.id">
+              <div class="px-5 py-4">
+                <div class="flex items-start justify-between gap-4">
+                  <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-3 mb-1">
+                      <span class="font-semibold text-gray-100" x-text="w.label"></span>
+                      <span x-show="w.isLinked" class="badge bg-purple-500/15 text-purple-300">LINKED</span>
+                    </div>
+                    <button @click="copyAddr(w.address)" class="text-xs text-gray-400 mono hover:text-cyan-300 transition truncate block max-w-md text-left" :title="w.address">
+                      <span x-text="w.address"></span>
+                      <span class="text-gray-600 ml-1">⧉</span>
+                    </button>
+                  </div>
+                  <div class="text-right">
+                    <div class="text-[10px] uppercase tracking-widest text-gray-500">Balance</div>
+                    <div class="font-semibold mono neon-cyan text-lg" x-text="formatAmount(w.stats?.currentBalance, selectedToken?.decimals)"></div>
+                    <div class="text-xs text-gray-500 mono mt-0.5" x-text="(parseFloat(w.stats?.ownershipPct ?? '0')).toFixed(4) + '%'"></div>
+                  </div>
+                  <button @click.stop="confirmRemoveWallet(w)" class="btn btn-danger">Remove</button>
+                </div>
+                <div class="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                  <div>
+                    <div class="text-gray-500 uppercase tracking-widest text-[9px]">Total Bought</div>
+                    <div class="mono text-gray-300" x-text="formatAmount(w.stats?.totalBought, selectedToken?.decimals)"></div>
+                  </div>
+                  <div>
+                    <div class="text-gray-500 uppercase tracking-widest text-[9px]">Total Sold</div>
+                    <div class="mono text-gray-300" x-text="formatAmount(w.stats?.totalSold, selectedToken?.decimals)"></div>
+                  </div>
+                  <div>
+                    <div class="text-gray-500 uppercase tracking-widest text-[9px]">Native Spent</div>
+                    <div class="mono text-gray-300" x-text="(parseFloat(w.stats?.nativeSpent ?? '0')).toFixed(4)"></div>
+                  </div>
+                  <div>
+                    <div class="text-gray-500 uppercase tracking-widest text-[9px]">Avg Entry</div>
+                    <div class="mono text-gray-300" x-text="w.stats?.avgEntryPrice ? parseFloat(w.stats.avgEntryPrice).toFixed(8) : '—'"></div>
+                  </div>
+                  <div>
+                    <div class="text-gray-500 uppercase tracking-widest text-[9px]">First Buy</div>
+                    <div class="mono text-gray-300" x-text="w.stats?.firstBuyAt ? new Date(w.stats.firstBuyAt).toLocaleDateString() : '—'"></div>
+                  </div>
+                  <div>
+                    <div class="text-gray-500 uppercase tracking-widest text-[9px]">Last Buy</div>
+                    <div class="mono text-gray-300" x-text="w.stats?.lastBuyAt ? new Date(w.stats.lastBuyAt).toLocaleDateString() : '—'"></div>
+                  </div>
+                  <div>
+                    <div class="text-gray-500 uppercase tracking-widest text-[9px]">Last Sell</div>
+                    <div class="mono text-gray-300" x-text="w.stats?.lastSellAt ? new Date(w.stats.lastSellAt).toLocaleDateString() : '—'"></div>
+                  </div>
+                  <div>
+                    <div class="text-gray-500 uppercase tracking-widest text-[9px]">Last Activity</div>
+                    <div class="mono text-gray-300" x-text="w.stats?.lastActivityAt ? new Date(w.stats.lastActivityAt).toLocaleString() : '—'"></div>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- RIGHT: LIVE FEED -->
+      <aside class="space-y-6">
+        <div class="gradient-border rounded-xl">
+          <header class="px-5 py-4 flex items-center justify-between border-b border-purple-500/15">
+            <div>
+              <h2 class="text-sm uppercase tracking-[0.2em] text-gray-300 font-semibold">Live Feed</h2>
+              <p class="text-xs text-gray-500 mt-1">Real-time alerts as they fire</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <div class="w-2 h-2 rounded-full" :class="connected ? 'bg-emerald-400' : 'bg-red-400'" :style="connected ? 'box-shadow: 0 0 8px #34d399;' : ''"></div>
+            </div>
+          </header>
+          <div class="divide-y divide-purple-500/10 max-h-[800px] overflow-y-auto scrollbar">
+            <template x-if="alerts.length === 0">
+              <div class="px-5 py-10 text-center text-sm text-gray-500">No alerts yet. They'll appear here in real time.</div>
+            </template>
+            <template x-for="a in alerts" :key="a.id">
+              <div class="px-5 py-4" :class="a._fresh ? 'alert-pulse' : ''">
+                <div class="flex items-start justify-between mb-1.5">
+                  <span class="badge" :class="alertBadgeClass(a.type)" x-text="a.type"></span>
+                  <span class="text-[10px] text-gray-500 mono" x-text="formatTime(a.sentAt)"></span>
+                </div>
+                <div class="text-sm font-semibold text-gray-100 mb-0.5">
+                  <span x-text="a.wallet?.label"></span>
+                  <span class="text-gray-500 font-normal mx-1">·</span>
+                  <span x-text="a.project?.name" class="text-cyan-300"></span>
+                </div>
+                <div class="text-xs text-gray-400 mono" x-show="a.transaction">
+                  <span x-text="formatAmount(a.transaction?.amount, a.project?.decimals)"></span>
+                  <span x-show="a.project?.symbol" x-text="a.project?.symbol" class="text-gray-500"></span>
+                  <span x-show="a.transaction?.nativeAmount" class="text-gray-500">
+                    · <span x-text="parseFloat(a.transaction.nativeAmount).toFixed(4)"></span>
+                  </span>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <!-- ADD TOKEN MODAL -->
+    <div x-show="showAddToken" x-cloak @keydown.escape.window="showAddToken = false"
+         class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
+      <div class="gradient-border-strong rounded-2xl p-6 w-full max-w-md" @click.outside="showAddToken = false">
+        <h3 class="text-xl font-bold gradient-text mb-1">Add Token</h3>
+        <p class="text-xs text-gray-500 mb-5">Track a token contract — wallets will be added next.</p>
+        <form @submit.prevent="addToken()">
+          <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">Chain</label>
+          <select x-model="form.chain" class="input select mb-4 cursor-pointer">
+            <option value="SOLANA">Solana</option>
+            <option value="ETHEREUM">Ethereum</option>
+            <option value="BASE">Base</option>
+          </select>
+          <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">Contract Address</label>
+          <input x-model="form.contractAddress" required class="input mb-4" placeholder="EPjFWdd5..." />
+          <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">Name</label>
+          <input x-model="form.name" required class="input mb-5" placeholder="e.g. USDC" />
+          <div class="flex justify-end gap-2">
+            <button type="button" @click="showAddToken = false" class="btn btn-ghost">Cancel</button>
+            <button type="submit" class="btn btn-primary" :disabled="busy" x-text="busy ? 'Adding…' : 'Add Token'"></button>
+          </div>
+          <p x-show="formError" x-text="formError" class="text-red-400 text-xs mt-3 mono"></p>
+        </form>
+      </div>
+    </div>
+
+    <!-- ADD WALLET MODAL -->
+    <div x-show="showAddWallet" x-cloak @keydown.escape.window="showAddWallet = false"
+         class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
+      <div class="gradient-border-strong rounded-2xl p-6 w-full max-w-md" @click.outside="showAddWallet = false">
+        <h3 class="text-xl font-bold gradient-text mb-1">Add Wallet</h3>
+        <p class="text-xs text-gray-500 mb-1">For token:</p>
+        <p class="text-sm text-cyan-300 mb-5" x-text="selectedToken?.name + ' (' + selectedToken?.chain + ')'"></p>
+        <form @submit.prevent="addWallet()">
+          <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">Wallet Address</label>
+          <input x-model="walletForm.walletAddress" required class="input mb-4" placeholder="7xKXtg2C..." />
+          <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">Label</label>
+          <input x-model="walletForm.label" required class="input mb-5" placeholder="Whale 1" />
+          <div class="flex justify-end gap-2">
+            <button type="button" @click="showAddWallet = false" class="btn btn-ghost">Cancel</button>
+            <button type="submit" class="btn btn-primary" :disabled="busy" x-text="busy ? 'Adding…' : 'Add Wallet'"></button>
+          </div>
+          <p x-show="formError" x-text="formError" class="text-red-400 text-xs mt-3 mono"></p>
+        </form>
+      </div>
+    </div>
+
+    <!-- TOAST -->
+    <div x-show="toast.show" x-transition
+         class="fixed bottom-6 right-6 gradient-border-strong rounded-lg px-4 py-3 text-sm z-50"
+         x-text="toast.msg"></div>
+
+    <script>
+      function dashboard() {
+        return {
+          tokens: [],
+          wallets: [],
+          alerts: [],
+          metrics: { tokens: 0, wallets: 0, alerts24h: 0, transactions24h: 0 },
+          selectedToken: null,
+          connected: false,
+          showAddToken: false,
+          showAddWallet: false,
+          form: { chain: 'SOLANA', contractAddress: '', name: '' },
+          walletForm: { walletAddress: '', label: '' },
+          formError: '',
+          busy: false,
+          toast: { show: false, msg: '' },
+
+          async init() {
+            await Promise.all([this.loadTokens(), this.loadAlerts(), this.loadMetrics()]);
+            this.connectStream();
+          },
+
+          showToast(msg) {
+            this.toast = { show: true, msg };
+            setTimeout(() => { this.toast.show = false; }, 2500);
+          },
+
+          chainBadgeClass(chain) {
+            return {
+              SOLANA: 'bg-purple-500/15 text-purple-300',
+              ETHEREUM: 'bg-blue-500/15 text-blue-300',
+              BASE: 'bg-cyan-500/15 text-cyan-300',
+            }[chain] || 'bg-gray-500/15 text-gray-300';
+          },
+          alertBadgeClass(type) {
+            return {
+              BUY: 'bg-emerald-500/15 text-emerald-300',
+              SELL: 'bg-red-500/15 text-red-300',
+              TRANSFER: 'bg-blue-500/15 text-blue-300',
+              LINKED_WALLET: 'bg-purple-500/15 text-purple-300',
+            }[type] || 'bg-gray-500/15 text-gray-300';
+          },
+
+          formatAmount(raw, decimals) {
+            if (raw == null) return '0';
+            try {
+              const d = decimals ?? 0;
+              const s = String(raw);
+              if (d === 0) return Number(s).toLocaleString();
+              const padded = s.padStart(d + 1, '0');
+              const whole = padded.slice(0, -d) || '0';
+              const frac = padded.slice(-d).replace(/0+$/, '').slice(0, 6);
+              return Number(whole).toLocaleString() + (frac ? '.' + frac : '');
+            } catch { return String(raw); }
+          },
+          formatTime(iso) {
+            try {
+              const d = new Date(iso);
+              const now = new Date();
+              const sec = Math.floor((now - d) / 1000);
+              if (sec < 60) return sec + 's ago';
+              if (sec < 3600) return Math.floor(sec / 60) + 'm ago';
+              if (sec < 86400) return Math.floor(sec / 3600) + 'h ago';
+              return d.toLocaleDateString();
+            } catch { return iso; }
+          },
+
+          async loadTokens() {
+            const r = await fetch('/api/v1/tokens');
+            if (!r.ok) return;
+            this.tokens = await r.json();
+          },
+          async loadMetrics() {
+            const r = await fetch('/api/v1/metrics');
+            if (!r.ok) return;
+            this.metrics = await r.json();
+          },
+          async loadAlerts() {
+            const r = await fetch('/api/v1/alerts?limit=50');
+            if (!r.ok) return;
+            this.alerts = await r.json();
+          },
+          async selectToken(t) {
+            this.selectedToken = t;
+            const r = await fetch('/api/v1/tokens/' + t.id + '/wallets');
+            if (!r.ok) return;
+            const data = await r.json();
+            this.wallets = data.wallets;
+            this.selectedToken = { ...t, decimals: data.project.decimals };
+          },
+          async togglePause(t) {
+            const r = await fetch('/api/v1/tokens/' + t.id + '/pause', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ paused: !t.isPaused }),
+            });
+            if (!r.ok) { this.showToast('Failed to toggle pause'); return; }
+            t.isPaused = !t.isPaused;
+            this.showToast(t.isPaused ? 'Token paused' : 'Token resumed');
+          },
+          confirmRemoveToken(t) {
+            if (!confirm('Remove ' + t.name + '? This deletes all wallets and history for this token.')) return;
+            this.removeToken(t);
+          },
+          async removeToken(t) {
+            const r = await fetch('/api/v1/tokens/' + t.id, { method: 'DELETE' });
+            if (!r.ok) { this.showToast('Failed to remove'); return; }
+            this.tokens = this.tokens.filter((x) => x.id !== t.id);
+            if (this.selectedToken?.id === t.id) { this.selectedToken = null; this.wallets = []; }
+            this.loadMetrics();
+            this.showToast('Token removed');
+          },
+          confirmRemoveWallet(w) {
+            if (!confirm('Stop tracking wallet ' + w.label + '?')) return;
+            this.removeWallet(w);
+          },
+          async removeWallet(w) {
+            const r = await fetch('/api/v1/wallets/' + encodeURIComponent(w.address), { method: 'DELETE' });
+            if (!r.ok) { this.showToast('Failed to remove'); return; }
+            this.wallets = this.wallets.filter((x) => x.id !== w.id);
+            this.loadTokens();
+            this.loadMetrics();
+            this.showToast('Wallet removed');
+          },
+          async addToken() {
+            this.formError = ''; this.busy = true;
+            try {
+              const r = await fetch('/api/v1/tokens', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(this.form),
+              });
+              const data = await r.json();
+              if (!r.ok) { this.formError = data.error || 'Failed'; return; }
+              this.showAddToken = false;
+              this.form = { chain: 'SOLANA', contractAddress: '', name: '' };
+              await this.loadTokens(); this.loadMetrics();
+              this.showToast('Token added');
+            } finally { this.busy = false; }
+          },
+          async addWallet() {
+            if (!this.selectedToken) return;
+            this.formError = ''; this.busy = true;
+            try {
+              const r = await fetch('/api/v1/tokens/' + this.selectedToken.id + '/wallets', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(this.walletForm),
+              });
+              const data = await r.json();
+              if (!r.ok) { this.formError = data.error || 'Failed'; return; }
+              this.showAddWallet = false;
+              this.walletForm = { walletAddress: '', label: '' };
+              await this.selectToken(this.selectedToken);
+              this.loadTokens(); this.loadMetrics();
+              this.showToast('Wallet added');
+            } finally { this.busy = false; }
+          },
+
+          copyAddr(addr) {
+            navigator.clipboard.writeText(addr).then(() => this.showToast('Address copied'));
+          },
+
+          connectStream() {
+            const es = new EventSource('/api/stream');
+            es.onopen = () => { this.connected = true; };
+            es.onerror = () => { this.connected = false; };
+            es.onmessage = (e) => {
+              try {
+                const ev = JSON.parse(e.data);
+                this.handleEvent(ev);
+              } catch {}
+            };
+          },
+          handleEvent(ev) {
+            if (ev.type === 'alert') {
+              const synthetic = {
+                id: 'live-' + Date.now(),
+                type: ev.alertType,
+                sentAt: ev.timestamp,
+                project: { name: ev.projectName, chain: ev.chain, symbol: ev.symbol, decimals: undefined },
+                wallet: { label: ev.walletLabel, address: ev.walletAddress },
+                transaction: { amount: ev.amount, nativeAmount: ev.nativeAmount, txHash: ev.txHash, type: ev.alertType },
+                _fresh: true,
+              };
+              this.alerts = [synthetic, ...this.alerts].slice(0, 100);
+              this.loadMetrics();
+              setTimeout(() => { synthetic._fresh = false; }, 800);
+            } else if (ev.type === 'token_added' || ev.type === 'token_removed') {
+              this.loadTokens(); this.loadMetrics();
+            } else if (ev.type === 'wallet_added' || ev.type === 'wallet_removed') {
+              if (this.selectedToken) this.selectToken(this.selectedToken);
+              this.loadTokens(); this.loadMetrics();
+            }
+          },
+        };
+      }
+    </script>
+  </body>
+</html>

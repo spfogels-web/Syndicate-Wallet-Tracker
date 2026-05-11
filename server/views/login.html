@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Syndicate Tracker — Sign In</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+    <style>
+      :root {
+        --neon-cyan: #22d3ee;
+        --neon-purple: #a855f7;
+        --bg-deep: #07060f;
+        --bg-card: #0f0d1c;
+        --border: rgba(168, 85, 247, 0.25);
+      }
+      html, body { background: var(--bg-deep); font-family: 'Inter', system-ui, sans-serif; color: #e5e7eb; }
+      body::before {
+        content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+        background:
+          radial-gradient(circle at 20% 10%, rgba(168,85,247,0.25), transparent 40%),
+          radial-gradient(circle at 80% 90%, rgba(34,211,238,0.18), transparent 40%),
+          linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+        background-size: auto, auto, 32px 32px, 32px 32px;
+      }
+      .glow-cyan { box-shadow: 0 0 30px rgba(34,211,238,0.35), 0 0 60px rgba(34,211,238,0.15); }
+      .glow-purple { box-shadow: 0 0 30px rgba(168,85,247,0.35), 0 0 60px rgba(168,85,247,0.15); }
+      .gradient-border {
+        background: linear-gradient(var(--bg-card), var(--bg-card)) padding-box,
+                    linear-gradient(135deg, #22d3ee 0%, #a855f7 100%) border-box;
+        border: 1px solid transparent;
+      }
+      .gradient-text {
+        background: linear-gradient(135deg, #22d3ee 0%, #a855f7 100%);
+        -webkit-background-clip: text; background-clip: text; color: transparent;
+      }
+      input { font-family: 'JetBrains Mono', monospace; }
+      button[type="submit"] {
+        background: linear-gradient(135deg, #06b6d4 0%, #a855f7 100%);
+        transition: all 0.2s ease;
+      }
+      button[type="submit"]:hover { filter: brightness(1.15); transform: translateY(-1px); }
+    </style>
+  </head>
+  <body class="min-h-screen flex items-center justify-center px-4 relative">
+    <div class="relative z-10 w-full max-w-md">
+      <div class="text-center mb-8">
+        <div class="inline-block px-4 py-1 rounded-full text-xs uppercase tracking-widest font-semibold border border-cyan-500/30 text-cyan-300 mb-4">Syndicate Tracker</div>
+        <h1 class="text-4xl font-bold gradient-text mb-2">Sign In</h1>
+        <p class="text-gray-400 text-sm">Premium wallet activity intelligence</p>
+      </div>
+      <form method="POST" action="/login" class="gradient-border rounded-2xl p-8 backdrop-blur-sm">
+        <label class="block text-xs uppercase tracking-widest text-gray-400 mb-2">Password</label>
+        <input
+          type="password"
+          name="password"
+          required
+          autofocus
+          autocomplete="current-password"
+          class="w-full bg-black/40 border border-purple-500/30 rounded-lg px-4 py-3 text-gray-100 focus:outline-none focus:border-cyan-400 focus:glow-cyan transition"
+          placeholder="••••••••••••"
+        />
+        <!--ERROR-->
+        <button
+          type="submit"
+          class="w-full mt-6 py-3 rounded-lg font-semibold text-white tracking-wide uppercase text-sm"
+        >Enter</button>
+      </form>
+      <p class="text-center text-xs text-gray-500 mt-6">Linked to <span class="text-cyan-400 font-mono">@Syndicatetracker_bot</span></p>
+    </div>
+  </body>
+</html>

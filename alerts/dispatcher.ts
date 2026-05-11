@@ -6,6 +6,8 @@ import { withRetry } from '../utils/retry';
 import { env } from '../config/env';
 import { getBot } from '../bot';
 import { renderBuy, renderLinkedWallet, renderSell, renderTransfer } from './templates';
+import { broadcast } from '../server/sse';
+import { rawToHuman } from '../utils/format';
 
 export interface DispatchInput {
   type: AlertType;
@@ -84,4 +86,29 @@ export async function dispatchAlert(input: DispatchInput): Promise<void> {
       },
     })
     .catch((err) => logger.warn({ err }, 'failed to persist alert row'));
+
+  // Broadcast to dashboard SSE clients (best-effort, never throws)
+  try {
+    const humanAmount = rawToHuman(input.tx.amount.toString(), input.project.decimals).toString();
+    broadcast({
+      type: 'alert',
+      alertType: input.type,
+      projectId: input.project.id,
+      projectName: input.project.name,
+      chain: input.project.chain,
+      walletId: input.wallet.id,
+      walletLabel: input.wallet.label,
+      walletAddress: input.wallet.address,
+      txHash: input.tx.txHash,
+      amount: input.tx.amount.toString(),
+      humanAmount,
+      symbol: input.project.symbol,
+      nativeAmount: input.tx.nativeAmount ? input.tx.nativeAmount.toString() : null,
+      currentBalance: input.wallet.stats?.currentBalance.toString() ?? '0',
+      ownershipPct: input.wallet.stats?.ownershipPct.toString() ?? '0',
+      timestamp: input.tx.timestamp.toISOString(),
+    });
+  } catch (err) {
+    logger.warn({ err }, 'dashboard broadcast failed');
+  }
 }

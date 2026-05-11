@@ -30,6 +30,10 @@ const EnvSchema = z.object({
   ALCHEMY_WEBHOOK_SIGNING_KEY: z.string().optional(),
 
   ETHERSCAN_API_KEY: z.string().min(1, 'ETHERSCAN_API_KEY is required'),
+
+  // Web dashboard auth. Optional — if unset, /dashboard returns 404 (feature disabled).
+  DASHBOARD_PASSWORD: z.string().min(8).optional(),
+  DASHBOARD_SESSION_SECRET: z.string().min(16).optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

@@ -2,6 +2,8 @@ import express, { type Application, type Request } from 'express';
 import { logger } from '../utils/logger';
 import { healthRouter } from './routes/health';
 import { webhookRouter } from './routes/webhooks';
+import { apiRouter } from './routes/api';
+import { dashboardRouter } from './routes/dashboard';
 
 export function createApp(): Application {
   const app = express();
@@ -16,6 +18,9 @@ export function createApp(): Application {
     }),
   );
 
+  // Form posts (dashboard login)
+  app.use(express.urlencoded({ extended: false }));
+
   app.use((req, _res, next) => {
     logger.debug({ method: req.method, path: req.path }, 'http request');
     next();
@@ -23,6 +28,8 @@ export function createApp(): Application {
 
   app.use('/', healthRouter);
   app.use('/webhooks', webhookRouter);
+  app.use('/api/v1', apiRouter);
+  app.use('/', dashboardRouter);
 
   // 404
   app.use((_req, res) => {
