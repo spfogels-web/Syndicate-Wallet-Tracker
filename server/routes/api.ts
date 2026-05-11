@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import { Chain } from '@prisma/client';
+import { Decimal } from 'decimal.js';
 import { prisma } from '../../database/prisma';
 import { requireAuthApi } from '../dashboardAuth';
 import { addProject, removeProject, setPaused, listProjects, updateProject } from '../../services/tokenService';
@@ -12,6 +13,81 @@ import {
 } from '../../services/walletService';
 import { broadcast } from '../sse';
 import { logger } from '../../utils/logger';
+import { getSolanaTokenPricesBatch } from '../../chains/solana/price';
+import { rawToHuman } from '../../utils/format';
+
+/**
+ * Given a wallet's raw stats (decimal strings) and optionally the current token price in SOL,
+ * compute friendly P/L metrics. All values returned as plain strings/numbers ready for JSON.
+ *
+ * - netSol: nativeReceived - nativeSpent (cashflow so far; doesn't count tokens still held)
+ * - realizedPnlSol: (totalSold * avgEntry) - nativeReceived flipped to "profit"
+ *                 = nativeReceived - costBasisOfSoldTokens
+ *   where costBasisOfSoldTokens = (totalSold / totalBought) * nativeSpent if totalBought > 0
+ * - currentValueSol: currentBalance (human) * currentPriceSol (if price known)
+ * - unrealizedPnlSol: currentValueSol - costBasisOfRemainingTokens (if price known)
+ * - totalPnlSol: realizedPnlSol + unrealizedPnlSol (if price known)
+ */
+function computePnL(
+  stats: {
+    currentBalance: { toString(): string };
+    totalBought: { toString(): string };
+    totalSold: { toString(): string };
+    nativeSpent: { toString(): string };
+    nativeReceived: { toString(): string };
+    avgEntryPrice: { toString(): string } | null;
+  } | null,
+  decimals: number,
+  currentPriceSol: number | null,
+): {
+  netSol: string;
+  realizedPnlSol: string;
+  currentValueSol: string | null;
+  unrealizedPnlSol: string | null;
+  totalPnlSol: string | null;
+} {
+  if (!stats) {
+    return {
+      netSol: '0',
+      realizedPnlSol: '0',
+      currentValueSol: null,
+      unrealizedPnlSol: null,
+      totalPnlSol: null,
+    };
+  }
+  const balanceRaw = new Decimal(stats.currentBalance.toString());
+  const totalBoughtRaw = new Decimal(stats.totalBought.toString());
+  const totalSoldRaw = new Decimal(stats.totalSold.toString());
+  const nativeSpent = new Decimal(stats.nativeSpent.toString());
+  const nativeReceived = new Decimal(stats.nativeReceived.toString());
+
+  const netSol = nativeReceived.sub(nativeSpent);
+
+  // Cost basis of sold tokens (proportional)
+  const costBasisOfSold = totalBoughtRaw.gt(0)
+    ? totalSoldRaw.div(totalBoughtRaw).mul(nativeSpent)
+    : new Decimal(0);
+  const realizedPnlSol = nativeReceived.sub(costBasisOfSold);
+
+  let currentValueSol: Decimal | null = null;
+  let unrealizedPnlSol: Decimal | null = null;
+  let totalPnlSol: Decimal | null = null;
+  if (currentPriceSol !== null && currentPriceSol > 0) {
+    const balanceHuman = rawToHuman(balanceRaw.toString(), decimals);
+    currentValueSol = balanceHuman.mul(currentPriceSol);
+    const costBasisOfRemaining = nativeSpent.sub(costBasisOfSold);
+    unrealizedPnlSol = currentValueSol.sub(costBasisOfRemaining);
+    totalPnlSol = realizedPnlSol.add(unrealizedPnlSol);
+  }
+
+  return {
+    netSol: netSol.toFixed(6),
+    realizedPnlSol: realizedPnlSol.toFixed(6),
+    currentValueSol: currentValueSol ? currentValueSol.toFixed(6) : null,
+    unrealizedPnlSol: unrealizedPnlSol ? unrealizedPnlSol.toFixed(6) : null,
+    totalPnlSol: totalPnlSol ? totalPnlSol.toFixed(6) : null,
+  };
+}
 
 export const apiRouter = Router();
 
@@ -58,21 +134,28 @@ apiRouter.get('/metrics', async (_req: Request, res: Response) => {
 apiRouter.get('/tokens', async (_req: Request, res: Response) => {
   try {
     const projects = await listProjects();
+    // Batch-fetch current SOL prices for all Solana tokens
+    const solanaMints = projects.filter((p) => p.chain === 'SOLANA').map((p) => p.contractAddress);
+    const priceMap = solanaMints.length > 0 ? await getSolanaTokenPricesBatch(solanaMints) : {};
     res.json(
-      projects.map((p) => ({
-        id: p.id,
-        chain: p.chain,
-        contractAddress: p.contractAddress,
-        name: p.name,
-        symbol: p.symbol,
-        decimals: p.decimals,
-        totalSupply: p.totalSupply ? p.totalSupply.toString() : null,
-        isPaused: p.isPaused,
-        telegramChatId: p.telegramChatId,
-        walletCount: p._count.wallets,
-        createdAt: p.createdAt.toISOString(),
-        updatedAt: p.updatedAt.toISOString(),
-      })),
+      projects.map((p) => {
+        const priceSol = p.chain === 'SOLANA' ? priceMap[p.contractAddress] ?? null : null;
+        return {
+          id: p.id,
+          chain: p.chain,
+          contractAddress: p.contractAddress,
+          name: p.name,
+          symbol: p.symbol,
+          decimals: p.decimals,
+          totalSupply: p.totalSupply ? p.totalSupply.toString() : null,
+          isPaused: p.isPaused,
+          telegramChatId: p.telegramChatId,
+          walletCount: p._count.wallets,
+          currentPriceSol: priceSol,
+          createdAt: p.createdAt.toISOString(),
+          updatedAt: p.updatedAt.toISOString(),
+        };
+      }),
     );
   } catch (err) {
     logger.error({ err }, '/api/tokens GET failed');
@@ -222,6 +305,14 @@ apiRouter.get('/tokens/:id/wallets', async (req: Request, res: Response) => {
       },
     });
     if (!project) return errorJson(res, 404, 'not_found');
+
+    // Fetch current price for Solana (best-effort)
+    let currentPriceSol: number | null = null;
+    if (project.chain === 'SOLANA') {
+      const prices = await getSolanaTokenPricesBatch([project.contractAddress]);
+      currentPriceSol = prices[project.contractAddress] ?? null;
+    }
+
     res.json({
       project: {
         id: project.id,
@@ -231,35 +322,40 @@ apiRouter.get('/tokens/:id/wallets', async (req: Request, res: Response) => {
         decimals: project.decimals,
         totalSupply: project.totalSupply ? project.totalSupply.toString() : null,
         contractAddress: project.contractAddress,
+        currentPriceSol,
       },
-      wallets: project.wallets.map((w) => ({
-        id: w.id,
-        address: w.address,
-        label: w.label,
-        twitterHandle: w.twitterHandle,
-        telegramHandle: w.telegramHandle,
-        website: w.website,
-        notes: w.notes,
-        tags: w.tags,
-        isLinked: w.isLinked,
-        isActive: w.isActive,
-        createdAt: w.createdAt.toISOString(),
-        stats: w.stats
-          ? {
-              currentBalance: w.stats.currentBalance.toString(),
-              totalBought: w.stats.totalBought.toString(),
-              totalSold: w.stats.totalSold.toString(),
-              nativeSpent: w.stats.nativeSpent.toString(),
-              nativeReceived: w.stats.nativeReceived.toString(),
-              avgEntryPrice: w.stats.avgEntryPrice ? w.stats.avgEntryPrice.toString() : null,
-              ownershipPct: w.stats.ownershipPct.toString(),
-              firstBuyAt: w.stats.firstBuyAt?.toISOString() ?? null,
-              lastBuyAt: w.stats.lastBuyAt?.toISOString() ?? null,
-              lastSellAt: w.stats.lastSellAt?.toISOString() ?? null,
-              lastActivityAt: w.stats.lastActivityAt?.toISOString() ?? null,
-            }
-          : null,
-      })),
+      wallets: project.wallets.map((w) => {
+        const pnl = computePnL(w.stats, project.decimals, currentPriceSol);
+        return {
+          id: w.id,
+          address: w.address,
+          label: w.label,
+          twitterHandle: w.twitterHandle,
+          telegramHandle: w.telegramHandle,
+          website: w.website,
+          notes: w.notes,
+          tags: w.tags,
+          isLinked: w.isLinked,
+          isActive: w.isActive,
+          createdAt: w.createdAt.toISOString(),
+          stats: w.stats
+            ? {
+                currentBalance: w.stats.currentBalance.toString(),
+                totalBought: w.stats.totalBought.toString(),
+                totalSold: w.stats.totalSold.toString(),
+                nativeSpent: w.stats.nativeSpent.toString(),
+                nativeReceived: w.stats.nativeReceived.toString(),
+                avgEntryPrice: w.stats.avgEntryPrice ? w.stats.avgEntryPrice.toString() : null,
+                ownershipPct: w.stats.ownershipPct.toString(),
+                firstBuyAt: w.stats.firstBuyAt?.toISOString() ?? null,
+                lastBuyAt: w.stats.lastBuyAt?.toISOString() ?? null,
+                lastSellAt: w.stats.lastSellAt?.toISOString() ?? null,
+                lastActivityAt: w.stats.lastActivityAt?.toISOString() ?? null,
+                ...pnl,
+              }
+            : null,
+        };
+      }),
     });
   } catch (err) {
     logger.error({ err }, '/api/tokens/:id/wallets failed');
@@ -349,36 +445,55 @@ apiRouter.get('/wallets', async (req: Request, res: Response) => {
   try {
     const q = typeof req.query.search === 'string' ? req.query.search.trim() : '';
     const wallets = await searchWallets(q || null, 200);
+
+    // searchWallets returns project as a select — re-query contract addresses for price lookups.
+    const projectIds = Array.from(new Set(wallets.map((w) => w.project.id)));
+    const projects = projectIds.length > 0
+      ? await prisma.project.findMany({
+          where: { id: { in: projectIds } },
+          select: { id: true, contractAddress: true, chain: true },
+        })
+      : [];
+    const projectById = new Map(projects.map((p) => [p.id, p]));
+    const solanaMints = projects.filter((p) => p.chain === 'SOLANA').map((p) => p.contractAddress);
+    const priceMap = solanaMints.length > 0 ? await getSolanaTokenPricesBatch(solanaMints) : {};
+
     res.json(
-      wallets.map((w) => ({
-        id: w.id,
-        address: w.address,
-        label: w.label,
-        twitterHandle: w.twitterHandle,
-        telegramHandle: w.telegramHandle,
-        website: w.website,
-        notes: w.notes,
-        tags: w.tags,
-        isLinked: w.isLinked,
-        isActive: w.isActive,
-        createdAt: w.createdAt.toISOString(),
-        project: w.project,
-        stats: w.stats
-          ? {
-              currentBalance: w.stats.currentBalance.toString(),
-              ownershipPct: w.stats.ownershipPct.toString(),
-              totalBought: w.stats.totalBought.toString(),
-              totalSold: w.stats.totalSold.toString(),
-              nativeSpent: w.stats.nativeSpent.toString(),
-              nativeReceived: w.stats.nativeReceived.toString(),
-              avgEntryPrice: w.stats.avgEntryPrice?.toString() ?? null,
-              firstBuyAt: w.stats.firstBuyAt?.toISOString() ?? null,
-              lastBuyAt: w.stats.lastBuyAt?.toISOString() ?? null,
-              lastSellAt: w.stats.lastSellAt?.toISOString() ?? null,
-              lastActivityAt: w.stats.lastActivityAt?.toISOString() ?? null,
-            }
-          : null,
-      })),
+      wallets.map((w) => {
+        const proj = projectById.get(w.project.id);
+        const priceSol = proj && proj.chain === 'SOLANA' ? priceMap[proj.contractAddress] ?? null : null;
+        const pnl = computePnL(w.stats, w.project.decimals, priceSol);
+        return {
+          id: w.id,
+          address: w.address,
+          label: w.label,
+          twitterHandle: w.twitterHandle,
+          telegramHandle: w.telegramHandle,
+          website: w.website,
+          notes: w.notes,
+          tags: w.tags,
+          isLinked: w.isLinked,
+          isActive: w.isActive,
+          createdAt: w.createdAt.toISOString(),
+          project: { ...w.project, currentPriceSol: priceSol },
+          stats: w.stats
+            ? {
+                currentBalance: w.stats.currentBalance.toString(),
+                ownershipPct: w.stats.ownershipPct.toString(),
+                totalBought: w.stats.totalBought.toString(),
+                totalSold: w.stats.totalSold.toString(),
+                nativeSpent: w.stats.nativeSpent.toString(),
+                nativeReceived: w.stats.nativeReceived.toString(),
+                avgEntryPrice: w.stats.avgEntryPrice?.toString() ?? null,
+                firstBuyAt: w.stats.firstBuyAt?.toISOString() ?? null,
+                lastBuyAt: w.stats.lastBuyAt?.toISOString() ?? null,
+                lastSellAt: w.stats.lastSellAt?.toISOString() ?? null,
+                lastActivityAt: w.stats.lastActivityAt?.toISOString() ?? null,
+                ...pnl,
+              }
+            : null,
+        };
+      }),
     );
   } catch (err) {
     logger.error({ err }, '/api/wallets GET failed');
