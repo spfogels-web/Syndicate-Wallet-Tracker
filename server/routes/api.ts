@@ -136,7 +136,10 @@ apiRouter.patch('/tokens/:id', async (req: Request, res: Response) => {
 
 apiRouter.post('/tokens/:id/test-alert', async (req: Request, res: Response) => {
   try {
-    const project = await prisma.project.findUnique({ where: { id: String(req.params.id) } });
+    const project = await prisma.project.findUnique({
+      where: { id: String(req.params.id) },
+      include: { wallets: { take: 1 } },
+    });
     if (!project) return errorJson(res, 404, 'not_found');
     const chatId = project.telegramChatId ?? null;
     const fallback = !chatId;
@@ -153,6 +156,28 @@ apiRouter.post('/tokens/:id/test-alert', async (req: Request, res: Response) => 
       `🧪 *Test alert*\n\nThis is a test from the dashboard for *${project.name}* (${project.chain}).\nIf you see this, alerts for this token will fire here.${fallback ? '\n\n_Using fallback chat (TELEGRAM\\_DEFAULT\\_CHAT\\_ID)_' : ''}`,
       { parse_mode: 'Markdown' },
     );
+
+    // Also flash the dashboard live feed so the user can see end-to-end without a real trade
+    const sampleWallet = project.wallets[0];
+    broadcast({
+      type: 'alert',
+      alertType: 'BUY',
+      projectId: project.id,
+      projectName: project.name,
+      chain: project.chain,
+      walletId: sampleWallet?.id ?? 'test',
+      walletLabel: sampleWallet?.label ?? '🧪 Test',
+      walletAddress: sampleWallet?.address ?? 'test',
+      txHash: 'test-' + Date.now(),
+      amount: '0',
+      humanAmount: '0',
+      symbol: project.symbol,
+      nativeAmount: null,
+      currentBalance: '0',
+      ownershipPct: '0',
+      timestamp: new Date().toISOString(),
+    });
+
     res.json({ ok: true, sentTo: target, usedFallback: fallback });
   } catch (err) {
     logger.warn({ err }, '/api/tokens/:id/test-alert failed');
