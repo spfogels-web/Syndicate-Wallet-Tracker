@@ -158,9 +158,10 @@ export function registerControlCommands(bot: Bot): void {
         return;
       }
 
-      // PUT update with only the fields Helius accepts — skip webhookURL to avoid
-      // any URL-validation issues that have been rejecting our requests.
+      // PUT update — Helius requires webhookURL in the body even when not changing it.
+      // Use the URL Helius itself returned so there's zero chance of string mismatch.
       const updateBody = {
+        webhookURL: ours.webhookURL,
         accountAddresses: Array.from(new Set(addresses)),
         transactionTypes: ['ANY'],
         webhookType: ours.webhookType ?? 'enhanced',
