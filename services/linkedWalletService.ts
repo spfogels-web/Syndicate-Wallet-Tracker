@@ -108,7 +108,7 @@ export async function getLinkedSiblings(walletId: string): Promise<Wallet[]> {
 
 export async function getRootWallet(walletId: string): Promise<Wallet | null> {
   // Walk up the parent chain. If the wallet is not linked, it's its own root.
-  let current = await prisma.wallet.findUnique({ where: { id: walletId } });
+  let current: Wallet | null = await prisma.wallet.findUnique({ where: { id: walletId } });
   if (!current) return null;
   let depth = 0;
   while (current?.isLinked && depth < 32) {
