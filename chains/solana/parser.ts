@@ -1,5 +1,7 @@
 import type { ParsedTokenEvent } from '../../types';
 
+const WSOL_MINT = 'So11111111111111111111111111111111111111112';
+
 /**
  * Helius enhanced webhook payload (subset we care about).
  * https://docs.helius.dev/webhooks-and-websockets/api-reference/webhook-events
@@ -64,20 +66,44 @@ export function parseHeliusTransactions(
       const rawAmount = transfer.rawTokenAmount?.tokenAmount ?? null;
       if (!rawAmount) continue;
 
-      // Compute native amount (SOL) attributable, prefer swap-derived; fall back to nativeTransfers
+      // Compute native amount (SOL) attributable, in order of preference:
+      // 1. events.swap.nativeInput/Output — set on Jupiter and some DEXes
+      // 2. tx.nativeTransfers — native SOL movement involving the wallet
+      // 3. WSOL transfers in tokenTransfers — pump.fun and other AMMs wrap SOL,
+      //    so the "SOL spent/received" lives inside tokenTransfers under WSOL mint
       let nativeAmount: string | null = null;
+      const userAddr = toTracked && to ? to : fromTracked && from ? from : null;
+
       if (swap) {
         if (swap.nativeInput?.amount && toTracked) {
-          // wallet bought tokens: SOL went out from somewhere paired with this swap
           nativeAmount = lamportsToSol(swap.nativeInput.amount);
         } else if (swap.nativeOutput?.amount && fromTracked) {
           nativeAmount = lamportsToSol(swap.nativeOutput.amount);
         }
       }
-      if (nativeAmount === null) {
+      if (nativeAmount === null && userAddr) {
         const lamports = (tx.nativeTransfers ?? [])
-          .filter((n) => n.fromUserAccount === (toTracked ? to : from) || n.toUserAccount === (toTracked ? to : from))
+          .filter((n) => n.fromUserAccount === userAddr || n.toUserAccount === userAddr)
           .reduce((acc, n) => acc + BigInt(Math.trunc(n.amount)), 0n);
+        if (lamports > 0n) nativeAmount = lamportsToSol(lamports.toString());
+      }
+      if (nativeAmount === null && userAddr) {
+        // WSOL fallback for AMM swaps (pump.fun, Raydium, Orca, etc.)
+        // BUY:  user sent WSOL out → look for WSOL transfers with fromUserAccount = user
+        // SELL: user received WSOL in → look for WSOL transfers with toUserAccount = user
+        const wsolTransfers = (tx.tokenTransfers ?? []).filter(
+          (t) =>
+            t.mint === WSOL_MINT &&
+            (toTracked ? t.fromUserAccount === userAddr : t.toUserAccount === userAddr),
+        );
+        const lamports = wsolTransfers.reduce((acc, t) => {
+          const raw = t.rawTokenAmount?.tokenAmount ?? '0';
+          try {
+            return acc + BigInt(raw);
+          } catch {
+            return acc;
+          }
+        }, 0n);
         if (lamports > 0n) nativeAmount = lamportsToSol(lamports.toString());
       }
 
