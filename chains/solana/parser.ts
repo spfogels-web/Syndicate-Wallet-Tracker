@@ -43,6 +43,7 @@ export function parseHeliusTransactions(
   txs: HeliusEnhancedTx[],
   trackedAddresses: Set<string>,
   trackedMints: Set<string>,
+  mintDecimals: Map<string, number> = new Map(),
 ): ParsedTokenEvent[] {
   const events: ParsedTokenEvent[] = [];
 
@@ -63,7 +64,20 @@ export function parseHeliusTransactions(
       const toTracked = to && trackedAddresses.has(to);
       if (!fromTracked && !toTracked) continue;
 
-      const rawAmount = transfer.rawTokenAmount?.tokenAmount ?? null;
+      // Helius's enhanced webhook sometimes omits rawTokenAmount (e.g. for some pump.fun events)
+      // and only includes the human-readable tokenAmount number. Fall back to converting that
+      // using the project's stored decimals.
+      let rawAmount: string | null = transfer.rawTokenAmount?.tokenAmount ?? null;
+      if (!rawAmount && typeof transfer.tokenAmount === 'number' && transfer.tokenAmount > 0) {
+        const decimals = transfer.rawTokenAmount?.decimals ?? mintDecimals.get(mint) ?? 0;
+        try {
+          // Convert human-readable to raw by multiplying by 10^decimals
+          const scaled = BigInt(Math.round(transfer.tokenAmount * Math.pow(10, decimals)));
+          if (scaled > 0n) rawAmount = scaled.toString();
+        } catch {
+          // ignore precision issues
+        }
+      }
       if (!rawAmount) continue;
 
       // Compute native amount (SOL) attributable, in order of preference:

@@ -26,10 +26,11 @@ export async function handleSolanaWebhook(req: Request, res: Response): Promise<
     // Build in-memory tracked sets to avoid DB roundtrips per transfer
     const wallets = await prisma.wallet.findMany({
       where: { project: { chain: 'SOLANA', isPaused: false }, isActive: true },
-      select: { address: true, project: { select: { contractAddress: true } } },
+      select: { address: true, project: { select: { contractAddress: true, decimals: true } } },
     });
     const trackedAddresses = new Set(wallets.map((w) => w.address));
     const trackedMints = new Set(wallets.map((w) => w.project.contractAddress));
+    const mintDecimals = new Map(wallets.map((w) => [w.project.contractAddress, w.project.decimals]));
 
     logger.info(
       {
@@ -41,7 +42,7 @@ export async function handleSolanaWebhook(req: Request, res: Response): Promise<
       'solana webhook received',
     );
 
-    const events = parseHeliusTransactions(txs, trackedAddresses, trackedMints);
+    const events = parseHeliusTransactions(txs, trackedAddresses, trackedMints, mintDecimals);
 
     if (events.length === 0) {
       // No match — dump enough of the first tx to figure out why
@@ -50,8 +51,9 @@ export async function handleSolanaWebhook(req: Request, res: Response): Promise<
         mint: t.mint,
         fromUserAccount: t.fromUserAccount,
         toUserAccount: t.toUserAccount,
-        amount: t.rawTokenAmount?.tokenAmount,
-        decimals: t.rawTokenAmount?.decimals,
+        tokenAmount: t.tokenAmount,
+        rawAmount: t.rawTokenAmount?.tokenAmount ?? null,
+        decimals: t.rawTokenAmount?.decimals ?? null,
       }));
       logger.warn(
         {
