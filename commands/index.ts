@@ -47,6 +47,8 @@ export function registerCommands(bot: Bot): void {
     { command: 'removewallet', description: 'Remove a tracked wallet' },
     { command: 'pause', description: 'Pause alerts for a token' },
     { command: 'resume', description: 'Resume alerts for a token' },
+    { command: 'setchat', description: 'Send alerts for a token to this chat' },
+    { command: 'clearchat', description: "Revert token's alerts to the default chat" },
     { command: 'resync', description: 'Force-sync Helius webhook (Solana)' },
     { command: 'diagnose', description: 'Show what webhooks the API key can see' },
     { command: 'admin', description: 'Manage admins' },

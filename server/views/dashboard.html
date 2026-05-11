@@ -148,19 +148,25 @@
               <div class="px-5 py-4 row-hover transition cursor-pointer" @click="selectToken(t)">
                 <div class="flex items-center justify-between gap-4">
                   <div class="min-w-0 flex-1">
-                    <div class="flex items-center gap-3 mb-1">
+                    <div class="flex items-center gap-3 mb-1 flex-wrap">
                       <span class="font-semibold text-gray-100" x-text="t.name"></span>
                       <span class="badge" :class="chainBadgeClass(t.chain)" x-text="t.chain"></span>
                       <span x-show="t.isPaused" class="badge bg-yellow-500/15 text-yellow-300">PAUSED</span>
                       <span x-show="t.symbol" class="text-xs text-gray-500 mono" x-text="t.symbol"></span>
                     </div>
                     <div class="text-xs text-gray-500 mono truncate" x-text="t.contractAddress"></div>
+                    <div class="text-[10px] text-gray-500 mt-1">
+                      Alerts →
+                      <span x-show="t.telegramChatId" class="text-cyan-400 mono" x-text="t.telegramChatId"></span>
+                      <span x-show="!t.telegramChatId" class="text-gray-600">default chat</span>
+                    </div>
                   </div>
                   <div class="text-right text-xs">
                     <div class="text-gray-400">Wallets</div>
                     <div class="text-lg font-semibold neon-cyan mono" x-text="t.walletCount"></div>
                   </div>
-                  <div class="flex items-center gap-2" @click.stop>
+                  <div class="flex items-center gap-2 flex-wrap justify-end" @click.stop>
+                    <button @click="openEditToken(t)" class="btn btn-ghost">Edit</button>
                     <button @click="togglePause(t)" class="btn btn-ghost" x-text="t.isPaused ? 'Resume' : 'Pause'"></button>
                     <button @click="confirmRemoveToken(t)" class="btn btn-danger">Remove</button>
                   </div>
@@ -275,13 +281,16 @@
               <h2 class="text-sm uppercase tracking-[0.2em] text-gray-300 font-semibold">Wallet Directory</h2>
               <p class="text-xs text-gray-500 mt-1">All tracked wallets across all tokens · click a row to edit</p>
             </div>
-            <input
-              type="text"
-              x-model="walletSearch"
-              @input.debounce.300ms="loadAllWallets()"
-              placeholder="Search by name, address, @handle, tag…"
-              class="input max-w-md"
-            />
+            <div class="flex items-center gap-2 flex-wrap">
+              <input
+                type="text"
+                x-model="walletSearch"
+                @input.debounce.300ms="loadAllWallets()"
+                placeholder="Search by name, address, @handle, tag…"
+                class="input max-w-md"
+              />
+              <button @click="openAddWalletFromDirectory()" class="btn btn-primary">+ Add Wallet</button>
+            </div>
           </header>
           <div class="divide-y divide-purple-500/10 max-h-[800px] overflow-y-auto scrollbar">
             <template x-if="allWallets.length === 0">
@@ -396,13 +405,56 @@
       </div>
     </div>
 
+    <!-- EDIT TOKEN MODAL -->
+    <div x-show="showEditToken" x-cloak @keydown.escape.window="showEditToken = false"
+         class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
+      <div class="gradient-border-strong rounded-2xl p-6 w-full max-w-md" @click.outside="showEditToken = false">
+        <h3 class="text-xl font-bold gradient-text mb-1">Edit Token</h3>
+        <p class="text-xs text-gray-500 mb-5">Rename or change where alerts get sent.</p>
+        <form @submit.prevent="saveEditToken()">
+          <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">Name</label>
+          <input x-model="tokenEditForm.name" required class="input mb-5" />
+          <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">Alert Telegram Chat ID</label>
+          <input x-model="tokenEditForm.telegramChatId" class="input mb-2" placeholder="e.g. 7727572027 or -1001234…" />
+          <p class="text-[11px] text-gray-500 mb-5">
+            Leave blank to use TELEGRAM_DEFAULT_CHAT_ID. Use your numeric user ID for DMs, or a negative number like
+            <span class="mono text-gray-400">-1001234567890</span> for groups. (Easier: run <span class="mono text-cyan-400">/setchat &lt;chain&gt; &lt;CA&gt;</span>
+            in the bot from the destination chat — it captures the ID automatically.)
+          </p>
+          <div class="flex items-center justify-between">
+            <button type="button" @click="sendTestAlert()" :disabled="busy" class="btn btn-ghost" x-text="busy ? 'Sending…' : '🧪 Send test alert'"></button>
+            <div class="flex gap-2">
+              <button type="button" @click="showEditToken = false" class="btn btn-ghost">Cancel</button>
+              <button type="submit" class="btn btn-primary" :disabled="busy">Save</button>
+            </div>
+          </div>
+          <p x-show="formError" x-text="formError" class="text-red-400 text-xs mt-3 mono"></p>
+        </form>
+      </div>
+    </div>
+
     <!-- ADD WALLET MODAL -->
     <div x-show="showAddWallet" x-cloak @keydown.escape.window="showAddWallet = false"
          class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
       <div class="gradient-border-strong rounded-2xl p-6 w-full max-w-md" @click.outside="showAddWallet = false">
         <h3 class="text-xl font-bold gradient-text mb-1">Add Wallet</h3>
-        <p class="text-xs text-gray-500 mb-1">For token:</p>
-        <p class="text-sm text-cyan-300 mb-5" x-text="selectedToken?.name + ' (' + selectedToken?.chain + ')'"></p>
+        <template x-if="!pickerMode && selectedToken">
+          <div>
+            <p class="text-xs text-gray-500 mb-1">For token:</p>
+            <p class="text-sm text-cyan-300 mb-5" x-text="selectedToken?.name + ' (' + selectedToken?.chain + ')'"></p>
+          </div>
+        </template>
+        <template x-if="pickerMode">
+          <div class="mb-4">
+            <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">Token *</label>
+            <select x-model="walletForm.projectId" class="input select cursor-pointer" required>
+              <option value="">— select a token —</option>
+              <template x-for="t in tokens" :key="t.id">
+                <option :value="t.id" x-text="t.name + ' (' + t.chain + ')'"></option>
+              </template>
+            </select>
+          </div>
+        </template>
         <form @submit.prevent="addWallet()" class="max-h-[70vh] overflow-y-auto scrollbar pr-2">
           <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">Wallet Address *</label>
           <input x-model="walletForm.walletAddress" required class="input mb-4" placeholder="7xKXtg2C..." />
@@ -491,8 +543,11 @@
           showAddToken: false,
           showAddWallet: false,
           showEditWallet: false,
+          showEditToken: false,
+          pickerMode: false,
           form: { chain: 'SOLANA', contractAddress: '', name: '' },
-          walletForm: { walletAddress: '', label: '', twitterHandle: '', telegramHandle: '', website: '', notes: '', tagsRaw: '' },
+          walletForm: { projectId: '', walletAddress: '', label: '', twitterHandle: '', telegramHandle: '', website: '', notes: '', tagsRaw: '' },
+          tokenEditForm: { id: '', name: '', telegramChatId: '' },
           editForm: { id: '', address: '', projectName: '', label: '', twitterHandle: '', telegramHandle: '', website: '', notes: '', tagsRaw: '' },
           formError: '',
           busy: false,
@@ -621,8 +676,16 @@
               this.showToast('Token added');
             } finally { this.busy = false; }
           },
+          openAddWalletFromDirectory() {
+            this.formError = '';
+            this.pickerMode = true;
+            this.walletForm = { projectId: '', walletAddress: '', label: '', twitterHandle: '', telegramHandle: '', website: '', notes: '', tagsRaw: '' };
+            this.showAddWallet = true;
+          },
+
           async addWallet() {
-            if (!this.selectedToken) return;
+            const targetProjectId = this.pickerMode ? this.walletForm.projectId : this.selectedToken?.id;
+            if (!targetProjectId) { this.formError = 'Pick a token first.'; return; }
             this.formError = ''; this.busy = true;
             try {
               const body = {
@@ -634,7 +697,7 @@
                 notes: this.walletForm.notes || null,
                 tags: (this.walletForm.tagsRaw || '').split(',').map((s) => s.trim()).filter(Boolean),
               };
-              const r = await fetch('/api/v1/tokens/' + this.selectedToken.id + '/wallets', {
+              const r = await fetch('/api/v1/tokens/' + targetProjectId + '/wallets', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
@@ -642,10 +705,71 @@
               const data = await r.json();
               if (!r.ok) { this.formError = data.error || 'Failed'; return; }
               this.showAddWallet = false;
-              this.walletForm = { walletAddress: '', label: '', twitterHandle: '', telegramHandle: '', website: '', notes: '', tagsRaw: '' };
-              await this.selectToken(this.selectedToken);
+              const wasPicker = this.pickerMode;
+              this.pickerMode = false;
+              this.walletForm = { projectId: '', walletAddress: '', label: '', twitterHandle: '', telegramHandle: '', website: '', notes: '', tagsRaw: '' };
+              if (wasPicker) {
+                this.loadAllWallets();
+              } else if (this.selectedToken) {
+                await this.selectToken(this.selectedToken);
+              }
               this.loadTokens(); this.loadMetrics();
               this.showToast('Wallet added');
+            } finally { this.busy = false; }
+          },
+
+          openEditToken(t) {
+            this.formError = '';
+            this.tokenEditForm = {
+              id: t.id,
+              name: t.name || '',
+              telegramChatId: t.telegramChatId || '',
+            };
+            this.showEditToken = true;
+          },
+
+          async saveEditToken() {
+            this.formError = ''; this.busy = true;
+            try {
+              const body = {
+                name: this.tokenEditForm.name,
+                telegramChatId: this.tokenEditForm.telegramChatId.trim() || null,
+              };
+              const r = await fetch('/api/v1/tokens/' + this.tokenEditForm.id, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+              });
+              const data = await r.json();
+              if (!r.ok) { this.formError = data.error || 'Failed'; return; }
+              this.showEditToken = false;
+              await this.loadTokens();
+              this.showToast('Token updated');
+            } finally { this.busy = false; }
+          },
+
+          async sendTestAlert() {
+            if (!this.tokenEditForm.id) return;
+            this.formError = ''; this.busy = true;
+            try {
+              // Save first so we test the new chatId, not the old one
+              if (this.tokenEditForm.id) {
+                await fetch('/api/v1/tokens/' + this.tokenEditForm.id, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    name: this.tokenEditForm.name,
+                    telegramChatId: this.tokenEditForm.telegramChatId.trim() || null,
+                  }),
+                });
+              }
+              const r = await fetch('/api/v1/tokens/' + this.tokenEditForm.id + '/test-alert', { method: 'POST' });
+              const data = await r.json();
+              if (!r.ok) { this.formError = data.error || 'Failed'; return; }
+              this.showToast('Test alert sent to ' + (data.usedFallback ? 'default chat' : 'configured chat'));
+              this.loadTokens();
+            } catch (err) {
+              this.formError = err.message || 'Failed';
             } finally { this.busy = false; }
           },
 

@@ -2,7 +2,8 @@ import { Router, type Request, type Response } from 'express';
 import { Chain } from '@prisma/client';
 import { prisma } from '../../database/prisma';
 import { requireAuthApi } from '../dashboardAuth';
-import { addProject, removeProject, setPaused, listProjects } from '../../services/tokenService';
+import { addProject, removeProject, setPaused, listProjects, updateProject } from '../../services/tokenService';
+import { getBot } from '../../bot';
 import {
   addWallet,
   removeWallet,
@@ -105,6 +106,56 @@ apiRouter.delete('/tokens/:id', async (req: Request, res: Response) => {
     res.json({ ok: true });
   } catch (err) {
     logger.warn({ err }, '/api/tokens DELETE failed');
+    errorJson(res, 400, (err as Error).message);
+  }
+});
+
+apiRouter.patch('/tokens/:id', async (req: Request, res: Response) => {
+  const id = String(req.params.id);
+  const body = req.body ?? {};
+  const update: { name?: string; telegramChatId?: string | null } = {};
+  if (typeof body.name === 'string' && body.name.trim()) update.name = body.name.trim();
+  if ('telegramChatId' in body) {
+    const v = body.telegramChatId;
+    if (v === null || v === '') update.telegramChatId = null;
+    else if (typeof v === 'string') update.telegramChatId = v.trim();
+    else return errorJson(res, 400, 'invalid_telegramChatId');
+  }
+  try {
+    const project = await updateProject(id, update);
+    res.json({
+      id: project.id,
+      name: project.name,
+      telegramChatId: project.telegramChatId,
+    });
+  } catch (err) {
+    logger.warn({ err }, '/api/tokens PATCH failed');
+    errorJson(res, 400, (err as Error).message);
+  }
+});
+
+apiRouter.post('/tokens/:id/test-alert', async (req: Request, res: Response) => {
+  try {
+    const project = await prisma.project.findUnique({ where: { id: String(req.params.id) } });
+    if (!project) return errorJson(res, 404, 'not_found');
+    const chatId = project.telegramChatId ?? null;
+    const fallback = !chatId;
+    const target = chatId ?? (process.env.TELEGRAM_DEFAULT_CHAT_ID || '');
+    if (!target) {
+      return errorJson(
+        res,
+        400,
+        'no_chat_configured: set this token\'s chat via /setchat in the bot, or set TELEGRAM_DEFAULT_CHAT_ID env var',
+      );
+    }
+    await getBot().api.sendMessage(
+      target,
+      `🧪 *Test alert*\n\nThis is a test from the dashboard for *${project.name}* (${project.chain}).\nIf you see this, alerts for this token will fire here.${fallback ? '\n\n_Using fallback chat (TELEGRAM\\_DEFAULT\\_CHAT\\_ID)_' : ''}`,
+      { parse_mode: 'Markdown' },
+    );
+    res.json({ ok: true, sentTo: target, usedFallback: fallback });
+  } catch (err) {
+    logger.warn({ err }, '/api/tokens/:id/test-alert failed');
     errorJson(res, 400, (err as Error).message);
   }
 });

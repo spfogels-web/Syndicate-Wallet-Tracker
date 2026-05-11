@@ -82,6 +82,22 @@ export async function setPaused(projectId: string, paused: boolean) {
   return prisma.project.update({ where: { id: projectId }, data: { isPaused: paused } });
 }
 
+export interface UpdateProjectInput {
+  name?: string;
+  /** Pass null to clear (alerts fall back to TELEGRAM_DEFAULT_CHAT_ID); undefined to leave unchanged. */
+  telegramChatId?: string | null;
+}
+
+export async function updateProject(projectId: string, input: UpdateProjectInput) {
+  return prisma.project.update({
+    where: { id: projectId },
+    data: {
+      ...(input.name !== undefined ? { name: input.name } : {}),
+      ...(input.telegramChatId !== undefined ? { telegramChatId: input.telegramChatId } : {}),
+    },
+  });
+}
+
 export async function refreshTotalSupply(projectId: string): Promise<void> {
   const p = await prisma.project.findUnique({ where: { id: projectId } });
   if (!p) return;

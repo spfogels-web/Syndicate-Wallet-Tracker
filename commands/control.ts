@@ -1,7 +1,7 @@
 import type { Bot } from 'grammy';
 import { Chain } from '@prisma/client';
 import { adminOnly } from '../bot/middleware';
-import { findProject, setPaused } from '../services/tokenService';
+import { findProject, setPaused, updateProject } from '../services/tokenService';
 import {
   getAllTrackedSolanaAddresses,
 } from '../services/walletService';
@@ -41,6 +41,52 @@ export function registerControlCommands(bot: Bot): void {
       });
     });
   }
+
+  bot.command('setchat', adminOnly, async (ctx) => {
+    const args = ctx.match?.toString().trim().split(/\s+/) ?? [];
+    if (args.length < 2) {
+      await ctx.reply('Usage: /setchat [chain] [CA]\n\nRun this in the chat where you want alerts for that token to be sent.');
+      return;
+    }
+    const chain = parseChain(args[0]);
+    if (!chain) {
+      await ctx.reply('Unknown chain. Use solana, ethereum, or base.');
+      return;
+    }
+    const project = await findProject(chain, args[1]);
+    if (!project) {
+      await ctx.reply('Token not found.');
+      return;
+    }
+    const chatId = String(ctx.chat.id);
+    await updateProject(project.id, { telegramChatId: chatId });
+    await ctx.reply(`✅ Alerts for *${project.name}* will now be sent here.\nChat ID: \`${chatId}\``, {
+      parse_mode: 'Markdown',
+    });
+  });
+
+  bot.command('clearchat', adminOnly, async (ctx) => {
+    const args = ctx.match?.toString().trim().split(/\s+/) ?? [];
+    if (args.length < 2) {
+      await ctx.reply('Usage: /clearchat [chain] [CA]\n\nReverts the token to the default alert chat (TELEGRAM_DEFAULT_CHAT_ID).');
+      return;
+    }
+    const chain = parseChain(args[0]);
+    if (!chain) {
+      await ctx.reply('Unknown chain.');
+      return;
+    }
+    const project = await findProject(chain, args[1]);
+    if (!project) {
+      await ctx.reply('Token not found.');
+      return;
+    }
+    await updateProject(project.id, { telegramChatId: null });
+    await ctx.reply(
+      `✅ Cleared alert chat for *${project.name}*. Alerts will fall back to TELEGRAM_DEFAULT_CHAT_ID.`,
+      { parse_mode: 'Markdown' },
+    );
+  });
 
   bot.command('diagnose', adminOnly, async (ctx) => {
     const keyHead = env.HELIUS_API_KEY.slice(0, 8);
