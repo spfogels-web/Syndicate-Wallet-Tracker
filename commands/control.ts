@@ -47,13 +47,39 @@ export function registerControlCommands(bot: Bot): void {
       await ctx.reply('❌ PUBLIC_URL is not set in Railway. Set it before resyncing.');
       return;
     }
-    const expectedUrl = `${env.PUBLIC_URL.replace(/\/+$/, '')}/webhooks/solana`;
+    const trimmed = env.PUBLIC_URL.trim().replace(/\/+$/, '');
+    const expectedUrl = `${trimmed}/webhooks/solana`;
+    let urlValid = false;
+    try {
+      const u = new URL(expectedUrl);
+      urlValid = u.protocol === 'https:' && u.hostname.length > 0;
+    } catch {
+      urlValid = false;
+    }
+    if (!urlValid) {
+      await ctx.reply(
+        [
+          '❌ Computed webhook URL is invalid:',
+          `\`${expectedUrl}\``,
+          '',
+          `PUBLIC_URL raw value (len ${env.PUBLIC_URL.length}):`,
+          `\`${env.PUBLIC_URL}\``,
+          '',
+          'Must be `https://your-domain.up.railway.app` — no quotes, no trailing slash, no spaces.',
+        ].join('\n'),
+        { parse_mode: 'Markdown' },
+      );
+      return;
+    }
     try {
       const addresses = await getAllTrackedSolanaAddresses();
       if (addresses.length === 0) {
         await ctx.reply('No Solana wallets tracked yet — add one via /menu first.');
         return;
       }
+      await ctx.reply(`Syncing webhook at:\n\`${expectedUrl}\`\nTracking ${addresses.length} address(es)…`, {
+        parse_mode: 'Markdown',
+      });
       await syncSolanaWebhookAddresses(addresses);
       const after = await listWebhooks();
       const ours = after.find((w) => w.webhookURL === expectedUrl);
@@ -87,7 +113,10 @@ export function registerControlCommands(bot: Bot): void {
       const detail = e.response
         ? `HTTP ${e.response.status} — ${JSON.stringify(e.response.data)}`
         : e.message;
-      await ctx.reply(`❌ Resync failed:\n\`${detail}\``, { parse_mode: 'Markdown' });
+      await ctx.reply(
+        `❌ Resync failed:\n\`${detail}\`\n\nURL we sent:\n\`${expectedUrl}\``,
+        { parse_mode: 'Markdown' },
+      );
     }
   });
 }
