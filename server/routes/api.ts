@@ -157,11 +157,17 @@ apiRouter.post('/tokens/:id/test-alert', async (req: Request, res: Response) => 
         'no_chat_configured: set this token\'s chat via /setchat in the bot, or set TELEGRAM_DEFAULT_CHAT_ID env var',
       );
     }
-    await getBot().api.sendMessage(
-      target,
-      `🧪 *Test alert*\n\nThis is a test from the dashboard for *${project.name}* (${project.chain}).\nIf you see this, alerts for this token will fire here.${fallback ? '\n\n_Using fallback chat (TELEGRAM\\_DEFAULT\\_CHAT\\_ID)_' : ''}`,
-      { parse_mode: 'Markdown' },
-    );
+    const message = [
+      '🧪 Test alert',
+      '',
+      `Token: ${project.name} (${project.chain})`,
+      'If you see this, alerts for this token will fire to this chat.',
+      fallback ? '\nUsing fallback chat (TELEGRAM_DEFAULT_CHAT_ID).' : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+    // No parse_mode — token names or env-var names with underscores would break Markdown.
+    await getBot().api.sendMessage(target, message);
 
     // Also flash the dashboard live feed so the user can see end-to-end without a real trade
     const sampleWallet = project.wallets[0];
