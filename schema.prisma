@@ -1,0 +1,216 @@
+// Crypto Syndicate Wallet Tracker — Prisma schema
+// Postgres with Decimal for token amounts (token decimals can exceed JS Number precision)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===================================================================
+// Enums
+// ===================================================================
+enum Chain {
+  SOLANA
+  ETHEREUM
+  BASE
+}
+
+enum TxType {
+  BUY
+  SELL
+  TRANSFER_IN
+  TRANSFER_OUT
+}
+
+enum AlertType {
+  BUY
+  SELL
+  TRANSFER
+  LINKED_WALLET
+}
+
+// ===================================================================
+// Project = a tracked token contract on a specific chain
+// ===================================================================
+model Project {
+  id              String        @id @default(cuid())
+  chain           Chain
+  contractAddress String        // Mint (Solana) or contract (EVM); stored lowercase for EVM
+  name            String
+  symbol          String?
+  decimals        Int           @default(0)
+  totalSupply     Decimal?      @db.Decimal(78, 0) // raw on-chain supply, no decimals applied
+  isPaused        Boolean       @default(false)
+  // Telegram chat where alerts for this project go.
+  // Falls back to TELEGRAM_DEFAULT_CHAT_ID if null.
+  telegramChatId  String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  wallets         Wallet[]
+  transactions   Transaction[]
+  alerts          Alert[]
+
+  @@unique([chain, contractAddress])
+  @@index([chain])
+  @@map("projects")
+}
+
+// ===================================================================
+// Wallet = an on-chain address being tracked for a specific Project
+// (same address tracked under two Projects = two Wallet rows)
+// ===================================================================
+model Wallet {
+  id              String        @id @default(cuid())
+  projectId       String
+  address         String        // lowercased for EVM
+  label           String
+  isLinked        Boolean       @default(false) // true if discovered via transfer from another tracked wallet
+  isActive        Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  project         Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  stats           WalletStats?
+  transactions   Transaction[]
+  alerts          Alert[]
+
+  // Linked wallet relations
+  parentLinks     LinkedWallet[] @relation("ChildLinks")  // edges where this wallet is the child
+  childLinks      LinkedWallet[] @relation("ParentLinks") // edges where this wallet is the parent
+
+  @@unique([projectId, address])
+  @@index([address])
+  @@index([projectId])
+  @@map("wallets")
+}
+
+// ===================================================================
+// LinkedWallet = directed edge from a parent (originally tracked) wallet
+// to a child wallet that received tokens from the parent.
+// Tracked combined ownership is computed by walking the graph.
+// ===================================================================
+model LinkedWallet {
+  id                String   @id @default(cuid())
+  parentWalletId    String
+  childWalletId     String
+  transferTxHash    String?
+  amountTransferred Decimal? @db.Decimal(78, 0) // raw amount
+  linkedAt          DateTime @default(now())
+
+  parentWallet      Wallet   @relation("ParentLinks", fields: [parentWalletId], references: [id], onDelete: Cascade)
+  childWallet       Wallet   @relation("ChildLinks",  fields: [childWalletId],  references: [id], onDelete: Cascade)
+
+  @@unique([parentWalletId, childWalletId])
+  @@index([childWalletId])
+  @@map("linked_wallets")
+}
+
+// ===================================================================
+// WalletStats = denormalized rollup so we never recompute on every alert
+// Updated on every Transaction insert.
+// ===================================================================
+model WalletStats {
+  id              String    @id @default(cuid())
+  walletId        String    @unique
+  firstBuyAt      DateTime?
+  lastBuyAt       DateTime?
+  lastSellAt      DateTime?
+  lastActivityAt  DateTime?
+  // Raw on-chain amounts (no decimals applied) so arithmetic is exact
+  currentBalance  Decimal   @default(0) @db.Decimal(78, 0)
+  totalBought     Decimal   @default(0) @db.Decimal(78, 0)
+  totalSold       Decimal   @default(0) @db.Decimal(78, 0)
+  // Native currency spent / received (SOL or ETH), human-readable units
+  nativeSpent     Decimal   @default(0) @db.Decimal(38, 18)
+  nativeReceived  Decimal   @default(0) @db.Decimal(38, 18)
+  // Average entry price in native currency per 1 token (human-readable units)
+  avgEntryPrice   Decimal?  @db.Decimal(38, 18)
+  // Cached ownership pct as basis points * 1e6 for precision (i.e. 1.22% = 1.22000000)
+  ownershipPct    Decimal   @default(0) @db.Decimal(12, 8)
+  updatedAt       DateTime  @updatedAt
+
+  wallet          Wallet    @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@map("wallet_stats")
+}
+
+// ===================================================================
+// Transaction = a token movement involving a tracked wallet
+// ===================================================================
+model Transaction {
+  id              String    @id @default(cuid())
+  projectId       String
+  walletId        String
+  txHash          String
+  type            TxType
+  amount          Decimal   @db.Decimal(78, 0) // raw on-chain
+  nativeAmount    Decimal?  @db.Decimal(38, 18) // human SOL/ETH
+  pricePerToken   Decimal?  @db.Decimal(38, 18)
+  counterparty    String?   // other wallet involved (lowercased for EVM)
+  blockNumber     BigInt?
+  timestamp       DateTime
+  rawData         Json?
+  createdAt       DateTime  @default(now())
+
+  project         Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  wallet          Wallet    @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  alerts          Alert[]
+
+  // Idempotency: prevents reprocessing the same on-chain event for the same wallet+type
+  @@unique([txHash, walletId, type])
+  @@index([walletId, timestamp])
+  @@index([projectId, timestamp])
+  @@map("transactions")
+}
+
+// ===================================================================
+// Alert = audit trail of every Telegram notification we sent
+// ===================================================================
+model Alert {
+  id                String       @id @default(cuid())
+  projectId         String
+  walletId          String
+  transactionId     String?
+  type              AlertType
+  message           String       @db.Text
+  telegramChatId    String?
+  telegramMessageId String?
+  sentAt            DateTime     @default(now())
+
+  project           Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  wallet            Wallet       @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  transaction       Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@index([walletId])
+  @@map("alerts")
+}
+
+// ===================================================================
+// Admin = Telegram users authorized to run admin commands
+// ===================================================================
+model Admin {
+  id          String   @id @default(cuid())
+  telegramId  BigInt   @unique
+  username    String?
+  addedById   BigInt?
+  addedAt     DateTime @default(now())
+
+  @@map("admins")
+}
+
+// ===================================================================
+// SystemConfig = simple key/value bag for runtime toggles (e.g. global pause)
+// ===================================================================
+model SystemConfig {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("system_config")
+}
