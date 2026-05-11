@@ -42,6 +42,47 @@ export function registerControlCommands(bot: Bot): void {
     });
   }
 
+  bot.command('diagnose', adminOnly, async (ctx) => {
+    const keyHead = env.HELIUS_API_KEY.slice(0, 8);
+    const keyTail = env.HELIUS_API_KEY.slice(-4);
+    try {
+      const webhooks = await listWebhooks();
+      const lines: string[] = [
+        '*🔍 Helius diagnostics*',
+        '',
+        `API key: \`${keyHead}…${keyTail}\` (len ${env.HELIUS_API_KEY.length})`,
+        `PUBLIC_URL: \`${env.PUBLIC_URL ?? '(not set)'}\``,
+        `Webhooks visible to this API key: *${webhooks.length}*`,
+        '',
+      ];
+      if (webhooks.length === 0) {
+        lines.push(
+          'No webhooks. If you created one in the Helius dashboard,',
+          'your Railway `HELIUS_API_KEY` is for a DIFFERENT Helius project.',
+          'Check that the dashboard URL contains the same UUID as your key.',
+        );
+      } else {
+        for (const w of webhooks.slice(0, 5)) {
+          lines.push(
+            `• \`${w.webhookURL}\``,
+            `  type=${w.webhookType}, addresses=${w.accountAddresses.length}`,
+          );
+        }
+      }
+      await ctx.reply(lines.join('\n'), { parse_mode: 'Markdown' });
+    } catch (err) {
+      const e = err as Error & { response?: { status?: number; data?: unknown }; config?: { baseURL?: string; url?: string } };
+      const where = e.config ? `${e.config.baseURL ?? ''}${e.config.url ?? ''}` : '(no request info)';
+      const detail = e.response
+        ? `HTTP ${e.response.status} — ${JSON.stringify(e.response.data)}`
+        : e.message;
+      await ctx.reply(
+        `❌ List webhooks failed:\n\`${detail}\`\n\nRequest URL: \`${where}\`\nAPI key: \`${keyHead}…${keyTail}\``,
+        { parse_mode: 'Markdown' },
+      );
+    }
+  });
+
   bot.command('resync', adminOnly, async (ctx) => {
     if (!env.PUBLIC_URL) {
       await ctx.reply('❌ PUBLIC_URL is not set in Railway. Set it before resyncing.');
@@ -109,12 +150,16 @@ export function registerControlCommands(bot: Bot): void {
         { parse_mode: 'Markdown' },
       );
     } catch (err) {
-      const e = err as Error & { response?: { status?: number; data?: unknown } };
+      const e = err as Error & {
+        response?: { status?: number; data?: unknown };
+        config?: { baseURL?: string; url?: string; method?: string };
+      };
+      const where = e.config ? `${e.config.method?.toUpperCase()} ${e.config.baseURL ?? ''}${e.config.url ?? ''}` : '(no request info)';
       const detail = e.response
         ? `HTTP ${e.response.status} — ${JSON.stringify(e.response.data)}`
         : e.message;
       await ctx.reply(
-        `❌ Resync failed:\n\`${detail}\`\n\nURL we sent:\n\`${expectedUrl}\``,
+        `❌ Resync failed:\n\`${detail}\`\n\nRequest: \`${where}\`\nWebhook URL we sent: \`${expectedUrl}\``,
         { parse_mode: 'Markdown' },
       );
     }

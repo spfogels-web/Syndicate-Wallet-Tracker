@@ -48,6 +48,7 @@ export function registerCommands(bot: Bot): void {
     { command: 'pause', description: 'Pause alerts for a token' },
     { command: 'resume', description: 'Resume alerts for a token' },
     { command: 'resync', description: 'Force-sync Helius webhook (Solana)' },
+    { command: 'diagnose', description: 'Show what webhooks the API key can see' },
     { command: 'admin', description: 'Manage admins' },
   ]);
 }
