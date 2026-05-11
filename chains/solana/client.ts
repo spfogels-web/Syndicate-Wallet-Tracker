@@ -6,7 +6,7 @@ import { logger } from '../../utils/logger';
 import { withRetry } from '../../utils/retry';
 
 const HELIUS_RPC = `https://mainnet.helius-rpc.com/?api-key=${env.HELIUS_API_KEY}`;
-const HELIUS_API_BASE = 'https://api-mainnet.helius-rpc.com/v0';
+const HELIUS_API_BASE = 'https://api.helius.xyz/v0';
 
 export const solanaConnection = new Connection(HELIUS_RPC, 'confirmed');
 
