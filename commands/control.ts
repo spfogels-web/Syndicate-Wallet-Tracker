@@ -51,12 +51,12 @@ export function registerControlCommands(bot: Bot): void {
       const webhooksRaw = resp.data;
       const list = Array.isArray(resp.data) ? resp.data : [];
       const lines: string[] = [
-        '*🔍 Helius diagnostics*',
+        '🔍 Helius diagnostics',
         '',
-        `API key: \`${keyHead}…${keyTail}\` (len ${env.HELIUS_API_KEY.length})`,
-        `PUBLIC_URL: \`${env.PUBLIC_URL ?? '(not set)'}\``,
-        `GET /webhooks HTTP status: *${status}*`,
-        `Response type: \`${Array.isArray(resp.data) ? `array(${resp.data.length})` : typeof resp.data}\``,
+        `API key: ${keyHead}...${keyTail} (len ${env.HELIUS_API_KEY.length})`,
+        `PUBLIC URL: ${env.PUBLIC_URL ?? '(not set)'}`,
+        `GET /webhooks HTTP status: ${status}`,
+        `Response type: ${Array.isArray(resp.data) ? `array(${resp.data.length})` : typeof resp.data}`,
         '',
       ];
       if (list.length === 0) {
@@ -64,8 +64,8 @@ export function registerControlCommands(bot: Bot): void {
         lines.push(
           'No webhooks visible to this key.',
           '',
-          `Raw response preview:`,
-          `\`${(preview ?? '').toString().slice(0, 200)}\``,
+          'Raw response preview:',
+          (preview ?? '').toString().slice(0, 300),
         );
       } else {
         for (const w of list.slice(0, 5)) {
@@ -74,10 +74,11 @@ export function registerControlCommands(bot: Bot): void {
           const addrCount = Array.isArray((w as { accountAddresses?: unknown }).accountAddresses)
             ? (w as { accountAddresses: unknown[] }).accountAddresses.length
             : 0;
-          lines.push(`• \`${url}\``, `  type=${type}, addresses=${addrCount}`);
+          lines.push(`• ${url}`, `  type=${type}, addresses=${addrCount}`);
         }
       }
-      await ctx.reply(lines.join('\n'), { parse_mode: 'Markdown' });
+      // No parse_mode — diagnostic text contains underscores and URLs that break Markdown.
+      await ctx.reply(lines.join('\n'));
     } catch (err) {
       const e = err as Error & {
         response?: { status?: number; data?: unknown };
@@ -85,11 +86,10 @@ export function registerControlCommands(bot: Bot): void {
       };
       const where = e.config ? `${e.config.baseURL ?? ''}${e.config.url ?? ''}` : '(no request info)';
       const detail = e.response
-        ? `HTTP ${e.response.status} — ${JSON.stringify(e.response.data)}`
+        ? `HTTP ${e.response.status} - ${JSON.stringify(e.response.data)}`
         : e.message;
       await ctx.reply(
-        `❌ Diagnose threw:\n\`${detail}\`\n\nRequest URL: \`${where}\`\nAPI key: \`${keyHead}…${keyTail}\``,
-        { parse_mode: 'Markdown' },
+        `Diagnose threw:\n${detail}\n\nRequest URL: ${where}\nAPI key: ${keyHead}...${keyTail}`,
       );
     }
   });
