@@ -1,6 +1,6 @@
 import { prisma } from '../database/prisma';
 import { Decimal } from 'decimal.js';
-import type { Project, Wallet, WalletStats } from '@prisma/client';
+import type { LinkedWallet, Project, Wallet, WalletStats } from '@prisma/client';
 import { addWallet, computeOwnershipPct } from './walletService';
 import { logger } from '../utils/logger';
 
@@ -112,12 +112,12 @@ export async function getRootWallet(walletId: string): Promise<Wallet | null> {
   if (!current) return null;
   let depth = 0;
   while (current?.isLinked && depth < 32) {
-    const edge = await prisma.linkedWallet.findFirst({
+    const edge: LinkedWallet | null = await prisma.linkedWallet.findFirst({
       where: { childWalletId: current.id },
       orderBy: { linkedAt: 'asc' },
     });
     if (!edge) break;
-    const parent = await prisma.wallet.findUnique({ where: { id: edge.parentWalletId } });
+    const parent: Wallet | null = await prisma.wallet.findUnique({ where: { id: edge.parentWalletId } });
     if (!parent) break;
     current = parent;
     depth++;

@@ -21,7 +21,7 @@ export function getEvmClient(chain: Chain): PublicClient {
   const c = createPublicClient({
     chain: chain === 'ETHEREUM' ? mainnet : base,
     transport: http(rpcUrl(chain)),
-  });
+  }) as PublicClient;
   clients[chain] = c;
   return c;
 }
