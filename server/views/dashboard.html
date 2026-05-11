@@ -395,7 +395,12 @@
           <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">Contract Address</label>
           <input x-model="form.contractAddress" required class="input mb-4" placeholder="EPjFWdd5..." />
           <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">Name</label>
-          <input x-model="form.name" required class="input mb-5" placeholder="e.g. USDC" />
+          <input x-model="form.name" required class="input mb-4" placeholder="e.g. USDC" />
+          <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">Alert Telegram Chat ID <span class="text-gray-600">(optional)</span></label>
+          <input x-model="form.telegramChatId" class="input mb-2" placeholder="e.g. 7727572027" />
+          <p class="text-[11px] text-gray-500 mb-5">
+            Leave blank to use TELEGRAM_DEFAULT_CHAT_ID fallback. Your numeric user ID = DM you. A group's negative chat ID = post to group. Easier: run <span class="mono text-cyan-400">/setchat &lt;chain&gt; &lt;CA&gt;</span> in the bot from the chat you want after creating.
+          </p>
           <div class="flex justify-end gap-2">
             <button type="button" @click="showAddToken = false" class="btn btn-ghost">Cancel</button>
             <button type="submit" class="btn btn-primary" :disabled="busy" x-text="busy ? 'Adding…' : 'Add Token'"></button>
@@ -545,7 +550,7 @@
           showEditWallet: false,
           showEditToken: false,
           pickerMode: false,
-          form: { chain: 'SOLANA', contractAddress: '', name: '' },
+          form: { chain: 'SOLANA', contractAddress: '', name: '', telegramChatId: '' },
           walletForm: { projectId: '', walletAddress: '', label: '', twitterHandle: '', telegramHandle: '', website: '', notes: '', tagsRaw: '' },
           tokenEditForm: { id: '', name: '', telegramChatId: '' },
           editForm: { id: '', address: '', projectName: '', label: '', twitterHandle: '', telegramHandle: '', website: '', notes: '', tagsRaw: '' },
@@ -663,15 +668,21 @@
           async addToken() {
             this.formError = ''; this.busy = true;
             try {
+              const body = {
+                chain: this.form.chain,
+                contractAddress: this.form.contractAddress,
+                name: this.form.name,
+                telegramChatId: (this.form.telegramChatId || '').trim() || null,
+              };
               const r = await fetch('/api/v1/tokens', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(this.form),
+                body: JSON.stringify(body),
               });
               const data = await r.json();
               if (!r.ok) { this.formError = data.error || 'Failed'; return; }
               this.showAddToken = false;
-              this.form = { chain: 'SOLANA', contractAddress: '', name: '' };
+              this.form = { chain: 'SOLANA', contractAddress: '', name: '', telegramChatId: '' };
               await this.loadTokens(); this.loadMetrics();
               this.showToast('Token added');
             } finally { this.busy = false; }

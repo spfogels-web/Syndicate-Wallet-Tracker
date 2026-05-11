@@ -81,14 +81,20 @@ apiRouter.get('/tokens', async (_req: Request, res: Response) => {
 });
 
 apiRouter.post('/tokens', async (req: Request, res: Response) => {
-  const { chain: chainRaw, contractAddress, name } = req.body ?? {};
+  const { chain: chainRaw, contractAddress, name, telegramChatId } = req.body ?? {};
   const chain = parseChain(chainRaw);
   if (!chain) return errorJson(res, 400, 'invalid_chain');
   if (typeof contractAddress !== 'string' || !contractAddress.trim()) return errorJson(res, 400, 'invalid_contract_address');
   if (typeof name !== 'string' || !name.trim()) return errorJson(res, 400, 'invalid_name');
+  const chatId = typeof telegramChatId === 'string' && telegramChatId.trim() ? telegramChatId.trim() : null;
 
   try {
-    const project = await addProject({ chain, contractAddress: contractAddress.trim(), name: name.trim() });
+    const project = await addProject({
+      chain,
+      contractAddress: contractAddress.trim(),
+      name: name.trim(),
+      telegramChatId: chatId,
+    });
     broadcast({ type: 'token_added', projectId: project.id, name: project.name, chain: project.chain });
     res.status(201).json({ id: project.id });
   } catch (err) {

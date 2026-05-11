@@ -94,21 +94,33 @@ export async function syncSolanaWebhookAddresses(addresses: string[]): Promise<v
     logger.warn('PUBLIC_URL not set; skipping Helius webhook sync');
     return;
   }
-  const webhookURL = `${env.PUBLIC_URL.replace(/\/+$/, '')}/webhooks/solana`;
-  const desired: Omit<HeliusWebhookConfig, 'webhookID'> = {
-    webhookURL,
+  const unique = Array.from(new Set(addresses));
+
+  // Find existing webhook by URL path suffix (forgiving — Helius's create-via-API
+  // has been rejecting our valid URLs, so the user creates the webhook once via
+  // the Helius dashboard and this sync keeps its address list up to date).
+  const list = await listWebhooks();
+  const ours = list.find(
+    (w) => typeof w.webhookURL === 'string' && w.webhookURL.toLowerCase().includes('/webhooks/solana'),
+  );
+
+  if (!ours || !ours.webhookID) {
+    logger.warn(
+      { count: list.length },
+      'no Helius webhook with /webhooks/solana found — create one in the Helius dashboard once, then sync will keep its address list current',
+    );
+    return;
+  }
+
+  // PUT update. Helius requires webhookURL in the body (returns "Webhook URL is required" otherwise).
+  // Use the URL Helius itself returned to avoid any string-mismatch validation.
+  const updateBody: Omit<HeliusWebhookConfig, 'webhookID'> = {
+    webhookURL: ours.webhookURL,
     transactionTypes: ['ANY'],
-    accountAddresses: Array.from(new Set(addresses)),
-    webhookType: 'enhanced',
+    accountAddresses: unique,
+    webhookType: (ours.webhookType ?? 'enhanced') as HeliusWebhookConfig['webhookType'],
     ...(env.HELIUS_WEBHOOK_AUTH_HEADER ? { authHeader: env.HELIUS_WEBHOOK_AUTH_HEADER } : {}),
   };
-
-  const existing = await listWebhooks();
-  const ours = existing.find((w) => w.webhookURL === webhookURL);
-  if (!ours) {
-    if (desired.accountAddresses.length === 0) return; // no addresses → don't create empty webhook
-    await createWebhook(desired);
-  } else if (ours.webhookID) {
-    await updateWebhook(ours.webhookID, desired);
-  }
+  await updateWebhook(ours.webhookID, updateBody);
+  logger.info({ id: ours.webhookID, count: unique.length }, 'Helius webhook addresses synced');
 }
