@@ -35,7 +35,14 @@ const EnvSchema = z.object({
 export type Env = z.infer<typeof EnvSchema>;
 
 function loadEnv(): Env {
-  const parsed = EnvSchema.safeParse(process.env);
+  // Treat empty-string env vars as missing so `.default(...)` and `.optional()` apply.
+  // Railway's UI happily saves blank values, which would otherwise crash zod validation
+  // for enum/url fields that have defaults.
+  const cleaned: Record<string, string | undefined> = {};
+  for (const [k, v] of Object.entries(process.env)) {
+    cleaned[k] = v === '' ? undefined : v;
+  }
+  const parsed = EnvSchema.safeParse(cleaned);
   if (!parsed.success) {
     // Print all field issues then exit — never start the bot with broken config.
     // eslint-disable-next-line no-console
