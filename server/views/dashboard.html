@@ -77,6 +77,49 @@
       .scrollbar::-webkit-scrollbar-thumb { background: rgba(168,85,247,0.3); border-radius: 3px; }
       .scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(168,85,247,0.5); }
       [x-cloak] { display: none !important; }
+
+      /* Leaderboard rank styling — premium tiered look for top 3 */
+      .rank-badge {
+        font-family: 'JetBrains Mono', monospace;
+        font-weight: 700;
+        font-size: 28px;
+        line-height: 1;
+        width: 64px; height: 64px;
+        display: flex; align-items: center; justify-content: center;
+        border-radius: 14px;
+        flex-shrink: 0;
+      }
+      .rank-1 {
+        background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 50%, #b45309 100%);
+        color: #1a0f02;
+        box-shadow: 0 0 28px rgba(251,191,36,0.5), 0 0 60px rgba(251,191,36,0.2);
+      }
+      .rank-2 {
+        background: linear-gradient(135deg, #e5e7eb 0%, #9ca3af 50%, #6b7280 100%);
+        color: #0f1419;
+        box-shadow: 0 0 24px rgba(209,213,219,0.4), 0 0 50px rgba(209,213,219,0.15);
+      }
+      .rank-3 {
+        background: linear-gradient(135deg, #f59e0b 0%, #b45309 50%, #78350f 100%);
+        color: #1a0f02;
+        box-shadow: 0 0 24px rgba(180,83,9,0.4);
+      }
+      .rank-default {
+        background: rgba(168,85,247,0.08);
+        color: #c4b5fd;
+        border: 1px solid rgba(168,85,247,0.25);
+        font-size: 22px;
+      }
+      .leader-row {
+        background: linear-gradient(var(--bg-card), var(--bg-card)) padding-box,
+                    linear-gradient(135deg, rgba(34,211,238,0.3) 0%, rgba(168,85,247,0.3) 100%) border-box;
+        border: 1px solid transparent;
+      }
+      .leader-row-top {
+        background: linear-gradient(var(--bg-card-2), var(--bg-card-2)) padding-box,
+                    linear-gradient(135deg, #fbbf24 0%, #a855f7 100%) border-box;
+        border: 1px solid transparent;
+      }
     </style>
   </head>
   <body x-data="dashboard()" x-init="init()" x-cloak class="relative">
@@ -122,6 +165,7 @@
     <section class="relative z-10 max-w-[1600px] mx-auto px-6 mt-6">
       <div class="flex gap-1 border-b border-purple-500/15">
         <button @click="activeTab = 'tokens'" class="px-5 py-3 text-sm font-semibold uppercase tracking-widest transition" :class="activeTab === 'tokens' ? 'text-cyan-300 border-b-2 border-cyan-400' : 'text-gray-500 hover:text-gray-300'">Tokens</button>
+        <button @click="activeTab = 'leaderboard'; loadLeaderboard()" class="px-5 py-3 text-sm font-semibold uppercase tracking-widest transition" :class="activeTab === 'leaderboard' ? 'text-cyan-300 border-b-2 border-cyan-400' : 'text-gray-500 hover:text-gray-300'">🏆 Leaderboard</button>
         <button @click="activeTab = 'wallets'; loadAllWallets()" class="px-5 py-3 text-sm font-semibold uppercase tracking-widest transition" :class="activeTab === 'wallets' ? 'text-cyan-300 border-b-2 border-cyan-400' : 'text-gray-500 hover:text-gray-300'">Wallet Directory</button>
       </div>
     </section>
@@ -359,6 +403,119 @@
         </div>
       </section>
 
+      <!-- LEADERBOARD -->
+      <section class="lg:col-span-2 space-y-6" x-show="activeTab === 'leaderboard'">
+        <div class="gradient-border rounded-xl">
+          <header class="px-5 py-4 flex items-center justify-between border-b border-purple-500/15 gap-4 flex-wrap">
+            <div class="min-w-0">
+              <h2 class="text-sm uppercase tracking-[0.2em] text-gray-300 font-semibold">🏆 Holder Leaderboard</h2>
+              <p class="text-xs text-gray-500 mt-1">Tracked wallets ranked by ownership of the selected token</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <label class="text-[10px] uppercase tracking-widest text-gray-500">Token</label>
+              <select x-model="leaderboardTokenId" @change="loadLeaderboard()" class="input select cursor-pointer min-w-[200px]">
+                <option value="">— pick a token —</option>
+                <template x-for="t in tokens" :key="t.id">
+                  <option :value="t.id" x-text="t.name + ' (' + t.chain + ')'"></option>
+                </template>
+              </select>
+            </div>
+          </header>
+
+          <!-- Top stats -->
+          <div x-show="leaderboardData" class="grid grid-cols-3 gap-4 px-5 py-4 border-b border-purple-500/10">
+            <div>
+              <div class="text-[10px] uppercase tracking-widest text-gray-500">Tracked Wallets</div>
+              <div class="text-xl font-bold mono neon-cyan" x-text="leaderboardEntries.length"></div>
+            </div>
+            <div>
+              <div class="text-[10px] uppercase tracking-widest text-gray-500">Total Tracked Supply</div>
+              <div class="text-xl font-bold mono neon-purple">
+                <span x-text="leaderboardTotalPct.toFixed(4)"></span>
+                <span class="text-xs text-gray-500 ml-1">%</span>
+              </div>
+            </div>
+            <div>
+              <div class="text-[10px] uppercase tracking-widest text-gray-500">Combined Balance</div>
+              <div class="text-xl font-bold mono text-gray-200" x-text="formatAmount(leaderboardTotalRawBalance, leaderboardData?.project?.decimals) + (leaderboardData?.project?.symbol ? ' ' + leaderboardData.project.symbol : '')"></div>
+            </div>
+          </div>
+
+          <!-- Leaderboard list -->
+          <div class="divide-y divide-purple-500/10">
+            <template x-if="!leaderboardTokenId">
+              <div class="px-5 py-12 text-center text-sm text-gray-500">Pick a token above to see its leaderboard.</div>
+            </template>
+            <template x-if="leaderboardTokenId && leaderboardEntries.length === 0">
+              <div class="px-5 py-12 text-center text-sm text-gray-500">No wallets tracked for this token yet.</div>
+            </template>
+            <template x-for="(w, idx) in leaderboardEntries" :key="w.id">
+              <div class="px-5 py-4">
+                <div class="flex items-center gap-4 rounded-xl p-4" :class="idx < 3 ? 'leader-row-top' : 'leader-row'">
+                  <!-- Rank badge -->
+                  <div class="rank-badge" :class="idx === 0 ? 'rank-1' : idx === 1 ? 'rank-2' : idx === 2 ? 'rank-3' : 'rank-default'">
+                    <span x-show="idx === 0">🥇</span>
+                    <span x-show="idx === 1">🥈</span>
+                    <span x-show="idx === 2">🥉</span>
+                    <span x-show="idx >= 3" x-text="'#' + (idx + 1)"></span>
+                  </div>
+
+                  <!-- Name + address + socials -->
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 mb-0.5 flex-wrap">
+                      <span class="text-lg font-bold text-gray-100" x-text="w.label || 'Unlabeled'"></span>
+                      <span x-show="w.isLinked" class="badge bg-purple-500/15 text-purple-300">LINKED</span>
+                      <template x-for="tag in (w.tags || [])" :key="tag">
+                        <span class="badge bg-gray-500/15 text-gray-300" x-text="tag"></span>
+                      </template>
+                    </div>
+                    <button @click="copyAddr(w.address)" class="text-xs text-gray-400 mono hover:text-cyan-300 transition truncate block max-w-md text-left" :title="w.address">
+                      <span x-text="w.address"></span>
+                      <span class="text-gray-600 ml-1">⧉</span>
+                    </button>
+                    <div class="flex items-center gap-3 mt-2 text-xs">
+                      <template x-if="w.twitterHandle">
+                        <a :href="'https://x.com/' + w.twitterHandle" target="_blank" class="text-cyan-300 hover:text-cyan-200 font-mono">𝕏 @<span x-text="w.twitterHandle"></span></a>
+                      </template>
+                      <template x-if="w.telegramHandle">
+                        <a :href="'https://t.me/' + w.telegramHandle" target="_blank" class="text-cyan-300 hover:text-cyan-200 font-mono">✈ @<span x-text="w.telegramHandle"></span></a>
+                      </template>
+                      <template x-if="w.website">
+                        <a :href="w.website" target="_blank" class="text-cyan-300 hover:text-cyan-200 font-mono">🔗 site</a>
+                      </template>
+                    </div>
+                  </div>
+
+                  <!-- Right: ownership + balance -->
+                  <div class="text-right shrink-0">
+                    <div class="text-[10px] uppercase tracking-widest text-gray-500 mb-1">Ownership</div>
+                    <div class="text-2xl font-bold mono gradient-text" x-text="(parseFloat(w.stats?.ownershipPct ?? '0')).toFixed(4) + '%'"></div>
+                    <div class="text-xs text-gray-400 mono mt-1" x-text="formatAmount(w.stats?.currentBalance, leaderboardData?.project?.decimals)"></div>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <!-- Footer total -->
+          <div x-show="leaderboardEntries.length > 0" class="px-5 py-4 border-t border-purple-500/15 flex items-center justify-between bg-black/30">
+            <div>
+              <div class="text-[10px] uppercase tracking-widest text-gray-500">Floor — Combined Tracked Supply</div>
+              <div class="text-xs text-gray-400 mt-1">Sum of every tracked wallet's ownership %</div>
+            </div>
+            <div class="text-right">
+              <div class="text-3xl font-bold mono gradient-text">
+                <span x-text="leaderboardTotalPct.toFixed(4)"></span>
+                <span class="text-base text-gray-500 ml-1">%</span>
+              </div>
+              <div x-show="leaderboardData?.project?.currentPriceSol" class="text-xs text-gray-500 mono mt-1">
+                ≈ <span x-text="(parseFloat(leaderboardTotalValueSol)).toFixed(4)"></span> SOL
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- RIGHT: LIVE FEED -->
       <aside class="space-y-6">
         <div class="gradient-border rounded-xl">
@@ -570,6 +727,44 @@
           metrics: { tokens: 0, wallets: 0, alerts24h: 0, transactions24h: 0 },
           selectedToken: null,
           activeTab: 'tokens',
+          leaderboardTokenId: '',
+          leaderboardData: null,
+          get leaderboardEntries() {
+            if (!this.leaderboardData) return [];
+            return [...this.leaderboardData.wallets].sort((a, b) => {
+              const pa = parseFloat(a.stats?.ownershipPct ?? '0');
+              const pb = parseFloat(b.stats?.ownershipPct ?? '0');
+              return pb - pa;
+            });
+          },
+          get leaderboardTotalPct() {
+            return this.leaderboardEntries.reduce((acc, w) => acc + parseFloat(w.stats?.ownershipPct ?? '0'), 0);
+          },
+          get leaderboardTotalRawBalance() {
+            // Sum raw balances as BigInt strings then format
+            try {
+              const sum = this.leaderboardEntries.reduce((acc, w) => {
+                const raw = w.stats?.currentBalance ?? '0';
+                try { return acc + BigInt(raw.split('.')[0]); } catch { return acc; }
+              }, 0n);
+              return sum.toString();
+            } catch { return '0'; }
+          },
+          get leaderboardTotalValueSol() {
+            const price = this.leaderboardData?.project?.currentPriceSol;
+            if (!price) return '0';
+            const decimals = this.leaderboardData?.project?.decimals ?? 0;
+            try {
+              const sum = this.leaderboardEntries.reduce((acc, w) => {
+                const raw = w.stats?.currentBalance ?? '0';
+                try {
+                  const human = parseFloat(raw) / Math.pow(10, decimals);
+                  return acc + human * parseFloat(price);
+                } catch { return acc; }
+              }, 0);
+              return String(sum);
+            } catch { return '0'; }
+          },
           connected: false,
           showAddToken: false,
           showAddWallet: false,
@@ -826,6 +1021,20 @@
             } finally { this.busy = false; }
           },
 
+          async loadLeaderboard() {
+            // Default to first tracked token if user hasn't picked yet
+            if (!this.leaderboardTokenId && this.tokens.length > 0) {
+              this.leaderboardTokenId = this.tokens[0].id;
+            }
+            if (!this.leaderboardTokenId) {
+              this.leaderboardData = null;
+              return;
+            }
+            const r = await fetch('/api/v1/tokens/' + this.leaderboardTokenId + '/wallets');
+            if (!r.ok) { this.leaderboardData = null; return; }
+            this.leaderboardData = await r.json();
+          },
+
           async loadAllWallets() {
             const q = (this.walletSearch || '').trim();
             const r = await fetch('/api/v1/wallets' + (q ? '?search=' + encodeURIComponent(q) : ''));
@@ -926,6 +1135,10 @@
               if (this.selectedToken) this.selectToken(this.selectedToken);
               this.loadTokens(); this.loadMetrics();
               if (this.activeTab === 'wallets') this.loadAllWallets();
+              if (this.activeTab === 'leaderboard') this.loadLeaderboard();
+            } else if (ev.type === 'alert' && this.activeTab === 'leaderboard') {
+              // Refresh leaderboard so balances/ownership update after a trade
+              this.loadLeaderboard();
             }
           },
         };
